@@ -3,11 +3,11 @@ using UnityEngine;
 public class InputAxis : MonoBehaviour 
 {
     protected static bool isPc = true;
-    protected static bool gameStarted = false;
+    public bool gameStarted = false;
     protected Touch touch;
-    private Touch lastTouch;
+    protected Touch lastTouch;
     protected Vector3 mousePosition;
-    private Vector3 lastmousePos;
+    protected Vector3 lastmousePos;
     protected Vector2 distanseValue;
     // Update is called once per frame
     public virtual void Update()
