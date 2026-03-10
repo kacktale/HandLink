@@ -11,16 +11,26 @@ using UnityEngine;
  */
 public class SpawnPivot : MonoBehaviour
 {
+    public static SpawnPivot Instance { get; private set; }
+
     [SerializeField] private Transform[] enemySummonPos;
     [SerializeField] private GameObject[] enemys;
+    [SerializeField] private GameObject judgeObj;
     [SerializeField] private GameObject target;
     [SerializeField] private float spawnDelay;
+    [SerializeField] private Transform poolParant;
 
     private Player player;
     private float currentTime;
 
     private List<List<GameObject>> enemyList = new List<List<GameObject>>();
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    private List<SpriteRenderer> judgeObjs = new List<SpriteRenderer>();
+
+    private void Awake()
+    {
+        Instance = this;
+    }
+
     void Start()
     {
         player = Player.Instance;
@@ -37,10 +47,16 @@ public class SpawnPivot : MonoBehaviour
         {
             for(int j = 0; j < 80; j++)
             {
-                GameObject enemy = Instantiate(enemys[i],transform.position,Quaternion.identity);
+                GameObject enemy = Instantiate(enemys[i],transform.position,Quaternion.identity, poolParant);
                 enemyList[i].Add(enemy);
                 enemy.SetActive(false);
             }
+        }
+        for (int i = 0;i < 80; i++)
+        {
+            SpriteRenderer judge = Instantiate(judgeObj, transform.position, Quaternion.identity, poolParant).GetComponent<SpriteRenderer>();
+            judgeObjs.Add(judge);
+            judge.gameObject.SetActive(false);
         }
     }
 
@@ -59,6 +75,23 @@ public class SpawnPivot : MonoBehaviour
         enemy = Instantiate(enemys[tag], transform.position, Quaternion.identity);
         enemyList[tag].Add(enemy);
         return enemy;
+    }
+
+    public SpriteRenderer FindJudge()
+    {
+        SpriteRenderer judge;
+        for (int i = 0; i < judgeObjs.Count; i++)
+        {
+            if (!judgeObjs[i].gameObject.activeInHierarchy)
+            {
+                judge = judgeObjs[i];
+                judge.gameObject.SetActive(true);
+                return judge;
+            }
+        }
+        judge = Instantiate(judgeObj, transform.position, Quaternion.identity, poolParant).GetComponent<SpriteRenderer>();
+        judgeObjs.Add(judge);
+        return judge;
     }
 
     // Update is called once per frame

@@ -61,7 +61,9 @@ public class Player : InputAxis
     {
         if (collision.gameObject.CompareTag("Enemy"))
         {
-            score += collision.gameObject.GetComponent<Enemy>().Caculate();
+            SpriteRenderer judge = SpawnPivot.Instance.FindJudge();
+            judge.gameObject.transform.position = collision.gameObject.transform.position;
+            score += collision.gameObject.GetComponent<Enemy>().Caculate(judge);
             if(score > 0) stamina = Math.Min(100,stamina+30);
             collision.gameObject.SetActive(false);
         }

@@ -7,7 +7,8 @@ public class Enemy : MonoBehaviour
     public Vector2 targetPos;
     public float maxScore;
 
-    public float[] judgeDistance = new float[6];
+    public float[] judgeDistance;
+    public Color[] judgeColor;
 
     private Player player;
 
@@ -22,7 +23,7 @@ public class Enemy : MonoBehaviour
         transform.position += transform.right * Time.deltaTime * speed;
     }
 
-    public float Caculate()
+    public float Caculate(SpriteRenderer judge)
     {
         float distance = Vector2.Distance(targetPos, transform.position);
         float currentScore = 0;
@@ -31,6 +32,7 @@ public class Enemy : MonoBehaviour
             if (distance <= judgeDistance[i])
             {
                 currentScore = (judgeDistance.Length - i) * maxScore / judgeDistance.Length;
+                judge.color = judgeColor[i];
                 return currentScore;
             }
         }

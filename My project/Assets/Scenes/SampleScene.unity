@@ -636,8 +636,10 @@ MonoBehaviour:
   - {fileID: 1392647210}
   enemys:
   - {fileID: 4156647361984882410, guid: e6cc2cdb6cb6b5d4eb06774c33da3421, type: 3}
+  judgeObj: {fileID: 8992250254902696867, guid: e8b997e843f5cbc429788a0e94e17a5d, type: 3}
   target: {fileID: 598638945}
-  spawnDelay: 5
+  spawnDelay: 2
+  poolParant: {fileID: 2059425461}
 --- !u!1 &598638945
 GameObject:
   m_ObjectHideFlags: 0
@@ -1139,6 +1141,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e4e33cd575335ce4eaf8861426c0bd47, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameStarted: 0
   stars: {fileID: 4780179664992928268, guid: 9f9a06cd1b9223343b02da4aef119601, type: 3}
   starParant: {fileID: 691854229}
   minSpawnPos: {x: 5, y: 7.5, z: 0}
@@ -1188,6 +1191,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e4e33cd575335ce4eaf8861426c0bd47, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameStarted: 0
   stars: {fileID: 4780179664992928268, guid: 9f9a06cd1b9223343b02da4aef119601, type: 3}
   starParant: {fileID: 756657369}
   minSpawnPos: {x: 5, y: 7.5, z: 0}
@@ -2435,6 +2439,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 73828248619d1e54ca70668654ad90c8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameStarted: 0
   pausePannel: {fileID: 679782985}
   pauseUpUI: {fileID: 1978788332}
   pauseDownUI: {fileID: 628075470}
@@ -2571,6 +2576,37 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 2088862204}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2059425460
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2059425461}
+  m_Layer: 0
+  m_Name: Pool
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2059425461
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2059425460}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.4221198, y: -0.3418483, z: 0.873123}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2088862200
 GameObject:
@@ -2739,6 +2775,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7c16f4e23ea6137438453b84cba5a73d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameStarted: 0
   hp: 3
   invincible: 0
   score: 0
@@ -2758,3 +2795,4 @@ SceneRoots:
   - {fileID: 756657369}
   - {fileID: 598638947}
   - {fileID: 556159609}
+  - {fileID: 2059425461}
