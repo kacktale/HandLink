@@ -2781,6 +2781,7 @@ MonoBehaviour:
   score: 0
   stamina: 100
   stunTime: 2.5
+  ScoreUI: {fileID: 1439855927}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -22,6 +22,7 @@ public class SpawnPivot : MonoBehaviour
 
     private Player player;
     private float currentTime;
+    private float minSpawnTime = 0.3f;
 
     private List<List<GameObject>> enemyList = new List<List<GameObject>>();
     private List<SpriteRenderer> judgeObjs = new List<SpriteRenderer>();
@@ -104,6 +105,7 @@ public class SpawnPivot : MonoBehaviour
 
         if (currentTime >= spawnDelay)
         {
+            spawnDelay = Mathf.Max(minSpawnTime,spawnDelay - Time.deltaTime);
             int summonPos = Random.Range(0, enemySummonPos.Length);
             int enemyType = Random.Range(0, enemys.Length);
 

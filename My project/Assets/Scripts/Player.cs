@@ -1,4 +1,5 @@
 using System;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -12,6 +13,8 @@ public class Player : InputAxis
 
     public float stamina = 100;
     public float stunTime = 1.5f;
+
+    public TextMeshProUGUI ScoreUI;
 
     private bool isStun = false;
     private float currentTime;
@@ -27,14 +30,8 @@ public class Player : InputAxis
         base.Update();
         if (!isStun)
         {
-            if (!isPc)
-            {
-                transform.position = touch.position;
-            }
-            else
-            {
-                transform.position = mousePosition;
-            }
+            if (!isPc) transform.position = touch.position;
+            else transform.position = mousePosition;
             stamina -= MathF.Abs(distanseValue.x + distanseValue.y) / 2;
             if(stamina <= 0)
             {
@@ -64,7 +61,8 @@ public class Player : InputAxis
             SpriteRenderer judge = SpawnPivot.Instance.FindJudge();
             judge.gameObject.transform.position = collision.gameObject.transform.position;
             score += collision.gameObject.GetComponent<Enemy>().Caculate(judge);
-            if(score > 0) stamina = Math.Min(100,stamina+30);
+            ScoreUI.SetText($"{(int)score}");
+            if (score > 0) stamina = Math.Min(100,stamina+30);
             collision.gameObject.SetActive(false);
         }
     }
