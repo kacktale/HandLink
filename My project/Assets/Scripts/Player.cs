@@ -14,16 +14,23 @@ public class Player : InputAxis
     public float stamina = 100;
     public float stunTime = 1.5f;
 
-    public TextMeshProUGUI ScoreUI;
-
-    public GameObject[] hpUI;
-
     private bool isStun = false;
     private float currentTime;
+    private UiManager uiManager;
 
     public void Awake()
     {
         Instance = this;
+    }
+
+    private void Start()
+    {
+        uiManager = UiManager.instance;
+        for (int i = 0; i < hp; i++)
+        {
+            GameObject obj = Instantiate(uiManager.hartObj, transform.position, Quaternion.identity, uiManager.hartUI);
+            uiManager.harts.Add(obj);
+        }
     }
 
     // Update is called once per frame
@@ -59,10 +66,12 @@ public class Player : InputAxis
     public void Damage()
     {
         hp--;
-        hpUI[hp].SetActive(false);
+        uiManager.harts[hp].SetActive(false);
         if(hp <= 0)
         {
             gameStarted = false;
+            uiManager.bestScore = Mathf.Max(uiManager.bestScore, score);
+            uiManager.bestScoreTxt.SetText($"{(int)uiManager.bestScore}");
         }
     }
 
@@ -73,7 +82,7 @@ public class Player : InputAxis
             SpriteRenderer judge = SpawnPivot.Instance.FindJudge();
             judge.gameObject.transform.position = collision.gameObject.transform.position;
             score += collision.gameObject.GetComponent<Enemy>().Caculate(judge);
-            ScoreUI.SetText($"{(int)score}");
+            uiManager.currentScoreText.SetText($"{(int)score}");
             if (score > 0) stamina = Math.Min(100,stamina+30);
             collision.gameObject.SetActive(false);
         }
