@@ -22,7 +22,11 @@ public class Enemy : MonoBehaviour
         if(!player.gameStarted) return;
         transform.position += transform.right * Time.deltaTime * speed;
         float distance = Vector2.Distance(targetPos, transform.position);
-        if(distance <= 1f) gameObject.SetActive(false);
+        if (distance <= 1f)
+        {
+            gameObject.SetActive(false);
+            player.Damage();
+        }
     }
 
     public float Caculate(SpriteRenderer judge)

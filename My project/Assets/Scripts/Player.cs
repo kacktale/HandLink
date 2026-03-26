@@ -16,6 +16,8 @@ public class Player : InputAxis
 
     public TextMeshProUGUI ScoreUI;
 
+    public GameObject[] hpUI;
+
     private bool isStun = false;
     private float currentTime;
 
@@ -51,6 +53,16 @@ public class Player : InputAxis
                 currentTime = 0;
                 stamina = 100;
             }
+        }
+    }
+
+    public void Damage()
+    {
+        hp--;
+        hpUI[hp].SetActive(false);
+        if(hp <= 0)
+        {
+            gameStarted = false;
         }
     }
 
