@@ -24,6 +24,11 @@ public sealed class PlayerUpgradeApplier : MonoBehaviour
         baseScale = transform.localScale;
     }
 
+    private void Start()
+    {
+        progression.ClampUpgradeLevels(GetMaximumLevel);
+    }
+
     public float GetUpgradeValue(UpgradeType type)
     {
         UpgradeDefinition definition = GetUpgradeDefinition(type);
@@ -53,5 +58,10 @@ public sealed class PlayerUpgradeApplier : MonoBehaviour
             UpgradeType.CircleSize => circleSizeUpgrade,
             _ => null
         };
+    }
+
+    private int GetMaximumLevel(UpgradeType type)
+    {
+        return GetUpgradeDefinition(type)?.MaxLevel ?? 0;
     }
 }

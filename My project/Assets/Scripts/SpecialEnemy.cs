@@ -11,11 +11,13 @@ public enum SpecialEnemyType
 public sealed class SpecialEnemy : MonoBehaviour
 {
     private const int PulseSegmentCount = 32;
-    private const float PulseInterval = 0.5f;
-    private const float PulseRadius = 0.5f;
-    private const float PulseWarningDuration = 0.25f;
-    private const float PulseWarningFlashInterval = 0.1f;
-    private const float PulseVisualDuration = 0.35f;
+    private const float PulseInterval = 0.3f;
+    private const float InitialPulseDelay = 0.05f;
+    private const float PulseRadius = 1f;
+    private const float PulseHitThickness = 0.14f;
+    private const float PulseWarningDuration = 0.15f;
+    private const float PulseWarningFlashInterval = 0.06f;
+    private const float PulseVisualDuration = 0.28f;
 
     private static readonly Color PulseWarningColor = new Color(1f, 0.35f, 0.6f);
 
@@ -25,6 +27,9 @@ public sealed class SpecialEnemy : MonoBehaviour
     private LineRenderer pulseRenderer;
     private float nextPulseTime;
     private float pulseVisualTime;
+    private float previousPulseRadius;
+    private bool pulseDamageAvailable;
+    private bool warningSoundPlayed;
 
     public void Configure(SpecialEnemyType enemyType)
     {
@@ -52,8 +57,11 @@ public sealed class SpecialEnemy : MonoBehaviour
 
     private void OnEnable()
     {
-        nextPulseTime = PulseInterval;
+        nextPulseTime = InitialPulseDelay;
         pulseVisualTime = 0f;
+        previousPulseRadius = 0f;
+        pulseDamageAvailable = false;
+        warningSoundPlayed = false;
         if (type == SpecialEnemyType.Pulse && spriteRenderer != null)
         {
             spriteRenderer.color = Color.red;
@@ -68,7 +76,10 @@ public sealed class SpecialEnemy : MonoBehaviour
 
     private void Update()
     {
-        if (type != SpecialEnemyType.Pulse || Player.Instance == null || !Player.Instance.gameStarted)
+        if (type != SpecialEnemyType.Pulse ||
+            Player.Instance == null ||
+            GameManager.Instance == null ||
+            !GameManager.Instance.IsGameplayActive)
         {
             return;
         }
@@ -84,7 +95,7 @@ public sealed class SpecialEnemy : MonoBehaviour
         UpdatePulseVisual();
     }
 
-    public bool TryHandleHeartArrival()
+public bool TryHandleHeartArrival()
     {
         if (type != SpecialEnemyType.HeartHealer || Player.Instance == null)
         {
@@ -92,6 +103,7 @@ public sealed class SpecialEnemy : MonoBehaviour
         }
 
         Player.Instance.Heal(1);
+        GameAudio.Instance?.PlayHeal();
         gameObject.SetActive(false);
         return true;
     }
@@ -106,16 +118,14 @@ public sealed class SpecialEnemy : MonoBehaviour
         gameObject.SetActive(false);
         return true;
     }
-
     private void EmitPulse()
     {
-        Player player = Player.Instance;
-        if (Vector2.Distance(transform.position, player.transform.position) <= PulseRadius)
-        {
-            player.Damage();
-        }
+        GameAudio.Instance?.PlayPulseBurst();
+        warningSoundPlayed = false;
 
         pulseVisualTime = PulseVisualDuration;
+        previousPulseRadius = 0f;
+        pulseDamageAvailable = true;
         SetPulseVisible(true);
     }
 
@@ -132,6 +142,9 @@ public sealed class SpecialEnemy : MonoBehaviour
         float parentScale = Mathf.Max(0.01f, transform.lossyScale.x);
         pulseRenderer.transform.localScale = Vector3.one * (radius / parentScale);
 
+        TryDamagePlayerAtWaveFront(radius);
+        previousPulseRadius = radius;
+
         Color color = new Color(1f, 0f, 0f, 1f - progress);
         pulseRenderer.startColor = color;
         pulseRenderer.endColor = color;
@@ -142,7 +155,27 @@ public sealed class SpecialEnemy : MonoBehaviour
         }
     }
 
-    private void UpdatePulseWarning()
+    private void TryDamagePlayerAtWaveFront(float currentRadius)
+    {
+        if (!pulseDamageAvailable || Player.Instance == null)
+        {
+            return;
+        }
+
+        float playerDistance = Vector2.Distance(
+            transform.position,
+            Player.Instance.transform.position);
+        if (playerDistance < previousPulseRadius - PulseHitThickness ||
+            playerDistance > currentRadius + PulseHitThickness)
+        {
+            return;
+        }
+
+        pulseDamageAvailable = false;
+        Player.Instance.Damage();
+    }
+
+private void UpdatePulseWarning()
     {
         if (spriteRenderer == null)
         {
@@ -151,8 +184,15 @@ public sealed class SpecialEnemy : MonoBehaviour
 
         if (nextPulseTime > PulseWarningDuration)
         {
+            warningSoundPlayed = false;
             spriteRenderer.color = Color.red;
             return;
+        }
+
+        if (!warningSoundPlayed)
+        {
+            GameAudio.Instance?.PlayPulseWarning();
+            warningSoundPlayed = true;
         }
 
         float warningElapsed = PulseWarningDuration - nextPulseTime;
@@ -173,9 +213,9 @@ public sealed class SpecialEnemy : MonoBehaviour
         pulseRenderer.useWorldSpace = false;
         pulseRenderer.loop = true;
         pulseRenderer.positionCount = PulseSegmentCount;
-        pulseRenderer.widthMultiplier = 0.08f;
+        pulseRenderer.widthMultiplier = 0.12f;
         pulseRenderer.material = new Material(Shader.Find("Sprites/Default"));
-        pulseRenderer.sortingOrder = spriteRenderer.sortingOrder - 1;
+        pulseRenderer.sortingOrder = spriteRenderer.sortingOrder + 1;
 
         for (int index = 0; index < PulseSegmentCount; index++)
         {

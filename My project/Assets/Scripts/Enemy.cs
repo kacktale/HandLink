@@ -63,17 +63,20 @@ public class Enemy : MonoBehaviour
         }
     }
 
-    public float Caculate(out Color judgementColor, out bool isPerfect)
+    public long Caculate(out Color judgementColor, out bool isPerfect)
     {
         judgementColor = Color.white;
         isPerfect = false;
         float distance = Vector2.Distance(targetPos, transform.position);
-        float currentScore = 0;
+        long currentScore = 0L;
         for (int i = 0; i < judgeDistance.Length; i++)
         {
             if (distance <= judgeDistance[i])
             {
-                currentScore = (judgeDistance.Length - i) * maxScore / judgeDistance.Length;
+                currentScore = (long)System.Math.Round(
+                    (judgeDistance.Length - i) * (double)maxScore /
+                    judgeDistance.Length,
+                    System.MidpointRounding.AwayFromZero);
                 judgementColor = judgeColor[i];
                 isPerfect = i == 0;
                 return currentScore;

@@ -110,8 +110,8 @@ public class GameOverFlow : MonoBehaviour
             return;
         }
 
-        currentScoreText.SetText($"SCORE  {(int)player.score:N0}");
-        maxScoreText.SetText($"BEST  {(int)player.Progression.BestScore:N0}");
+        currentScoreText.SetText($"SCORE  {player.score:N0}");
+        maxScoreText.SetText($"BEST  {player.Progression.BestScore:N0}");
     }
 
     public void RefreshShop()

@@ -76,14 +76,16 @@ public sealed class InGameSettingsPanel : MonoBehaviour
         soundButton?.onClick.RemoveListener(ToggleSound);
     }
 
-    private void Open()
+private void Open()
     {
+        GameAudio.Instance?.PlayButton();
         mainPanel?.SetActive(false);
         settingsPanel?.SetActive(true);
     }
 
-    private void Close()
+private void Close()
     {
+        GameAudio.Instance?.PlayButton();
         settingsPanel?.SetActive(false);
         mainPanel?.SetActive(true);
     }
@@ -105,8 +107,9 @@ public sealed class InGameSettingsPanel : MonoBehaviour
         SetLanguage(GameLanguage.English);
     }
 
-    private void ToggleSound()
+private void ToggleSound()
     {
+        GameAudio.Instance?.PlayButton();
         PlayerPrefs.SetInt(SoundEnabledPreferenceKey, IsSoundEnabled ? 0 : 1);
         PlayerPrefs.Save();
         ApplySoundState();
@@ -134,12 +137,15 @@ public sealed class InGameSettingsPanel : MonoBehaviour
         ApplySettings();
     }
 
-    private void ApplySoundState()
+private void ApplySoundState()
     {
+        bool muted = !IsSoundEnabled;
         if (soundSource != null)
         {
-            soundSource.mute = !IsSoundEnabled;
+            soundSource.mute = muted;
         }
+
+        GameAudio.Instance?.SetMuted(muted);
 
         if (soundButtonText != null)
         {

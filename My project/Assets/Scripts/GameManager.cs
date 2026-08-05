@@ -66,7 +66,9 @@ public sealed class GameManager : MonoBehaviour
             return false;
         }
 
-        isTransitioning = true;
+        
+        GameAudio.Instance?.PlayButton();
+isTransitioning = true;
         enemySpawner.ResetGame();
         player.BeginGame();
         ChangeState(GameState.Playing);
@@ -87,7 +89,9 @@ public sealed class GameManager : MonoBehaviour
 
         isTransitioning = true;
         player.EndGame();
-        uiManager.SaveGameResult(player);
+        
+        GameAudio.Instance?.PlayGameOver();
+uiManager.SaveGameResult(player);
         ChangeState(GameState.GameOver);
         isTransitioning = false;
         return true;

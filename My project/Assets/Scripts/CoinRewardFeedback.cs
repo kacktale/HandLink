@@ -12,10 +12,15 @@ public sealed class CoinRewardFeedback : MonoBehaviour
     [SerializeField, Min(0f)] private float riseDistance = 80f;
     [SerializeField] private Color coinTextColor = new Color(1f, 0.82f, 0.15f, 1f);
 
-    private readonly List<PopupState> popupPool = new List<PopupState>();
-
+    
+    private Canvas uiCanvas;
+private readonly List<PopupState> popupPool = new List<PopupState>();
     private void Awake()
     {
+        uiCanvas = popupRoot != null
+            ? popupRoot.GetComponentInParent<Canvas>()
+            : GetComponentInParent<Canvas>();
+
         for (int index = 0; index < initialPoolSize; index++)
         {
             CreatePopup();
@@ -24,7 +29,7 @@ public sealed class CoinRewardFeedback : MonoBehaviour
 
     public void Show(Vector3 worldPosition, int amount)
     {
-        if (amount <= 0 || popupTemplate == null || popupRoot == null)
+        if (amount <= 0 || popupTemplate == null || popupRoot == null || uiCanvas == null)
         {
             return;
         }
@@ -35,11 +40,29 @@ public sealed class CoinRewardFeedback : MonoBehaviour
             return;
         }
 
+        Camera worldCamera = Camera.main;
+        if (worldCamera == null)
+        {
+            return;
+        }
+
+        Vector2 screenPosition = RectTransformUtility.WorldToScreenPoint(worldCamera, worldPosition);
+        Camera uiCamera = uiCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : uiCanvas.worldCamera;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                popupRoot,
+                screenPosition,
+                uiCamera,
+                out Vector2 localPosition))
+        {
+            return;
+        }
+
         popup.Time = 0f;
         popup.Active = true;
+        popup.StartPosition = localPosition;
         popup.Text.SetText($"+{amount}C");
         popup.Text.color = coinTextColor;
-        popup.RectTransform.position = popupTemplate.rectTransform.position;
+        popup.RectTransform.anchoredPosition = popup.StartPosition;
         popup.Text.transform.SetAsLastSibling();
         popup.Text.gameObject.SetActive(true);
     }
@@ -59,8 +82,8 @@ public sealed class CoinRewardFeedback : MonoBehaviour
             Color color = coinTextColor;
             color.a *= 1f - progress;
             popup.Text.color = color;
-            // 코인 보유량 텍스트의 Transform을 기준으로 팝업을 표시한다.
-            popup.RectTransform.position = popupTemplate.rectTransform.position + Vector3.up * (riseDistance * progress);
+            // 적이 처치된 월드 위치를 화면 좌표로 변환해 팝업을 표시한다.
+            popup.RectTransform.anchoredPosition = popup.StartPosition + Vector2.up * (riseDistance * progress);
 
             if (progress >= 1f)
             {
@@ -97,7 +120,9 @@ public sealed class CoinRewardFeedback : MonoBehaviour
         public readonly TextMeshProUGUI Text;
         public readonly RectTransform RectTransform;
         public bool Active;
-        public float Time;
+        
+        public Vector2 StartPosition;
+public float Time;
         public PopupState(TextMeshProUGUI text)
         {
             Text = text;

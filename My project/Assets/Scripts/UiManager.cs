@@ -11,7 +11,7 @@ public class UiManager : MonoBehaviour
     public TextMeshProUGUI bestScoreTxt;
     public TextMeshProUGUI currentScoreText;
     [SerializeField] private TextMeshProUGUI heldCoinsText;
-    public float bestScore = 0;
+    public long bestScore;
     [SerializeField] private DamageFeedback damageFeedback;
     [SerializeField] private CoinRewardFeedback coinRewardFeedback;
 
@@ -56,24 +56,25 @@ public class UiManager : MonoBehaviour
 
         player.Progression.SaveBestScore(player.score);
         SetBestScore(player.Progression.BestScore);
-        bestScoreTxt.SetText($"{(int)bestScore}");
+        bestScoreTxt.SetText($"{bestScore:N0}");
     }
 
-    private void SetBestScore(float value)
+    private void SetBestScore(long value)
     {
         bestScore = value;
-        bestScoreTxt.SetText($"{(int)bestScore}");
+        bestScoreTxt.SetText($"{bestScore:N0}");
     }
 
     public void ResetGameUI(int hp)
     {
         RefreshHealthUi(hp, hp);
-        RefreshScoreUi(0f);
+        RefreshScoreUi(0L);
     }
 
-    public void PlayDamageFeedback()
+public void PlayDamageFeedback()
     {
         damageFeedback?.Play();
+        GameAudio.Instance?.PlayDamage();
     }
 
     public void ShowCoinReward(Vector3 worldPosition, int amount)
@@ -130,9 +131,9 @@ public class UiManager : MonoBehaviour
         }
     }
 
-    private void RefreshScoreUi(float score)
+    private void RefreshScoreUi(long score)
     {
-        currentScoreText.SetText($"{(int)score}");
+        currentScoreText.SetText($"{score:N0}");
     }
 
     private void RefreshProgressionUi()

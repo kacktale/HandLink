@@ -24,7 +24,7 @@ public class Player : InputAxis
     private PlayerVisual playerVisual;
 
     public int hp => health == null ? 0 : health.CurrentHealth;
-    public float score => scoreController == null ? 0f : scoreController.CurrentScore;
+    public long score => scoreController == null ? 0L : scoreController.CurrentScore;
     public float stamina => staminaController == null ? 0f : staminaController.CurrentStamina;
     public PlayerProgression Progression => progression;
     public PlayerHealth Health => health;
@@ -164,10 +164,12 @@ public class Player : InputAxis
         judge.transform.position = collision.transform.position;
 
         Enemy enemy = collision.gameObject.GetComponent<Enemy>();
-        float awardedScore =
+        long awardedScore =
             enemy.Caculate(out Color judgementColor, out bool isPerfect);
         scoreController.AddScore(awardedScore);
-        EnemyJudged?.Invoke(isPerfect);
+        
+        GameAudio.Instance?.PlayHit(isPerfect);
+EnemyJudged?.Invoke(isPerfect);
         judge.color = judgementColor;
 
         if (isPerfect && !TryHandlePerfectCoinDrop(collision.transform.position))
@@ -177,7 +179,12 @@ public class Player : InputAxis
             CoinRewarded?.Invoke(collision.transform.position, perfectCoinReward);
         }
 
-        if (scoreController.CurrentScore > 0f)
+        if (isPerfect)
+        {
+            GameAudio.Instance?.PlayCoin();
+        }
+
+        if (scoreController.CurrentScore > 0L)
         {
             staminaController.Restore(30f);
         }

@@ -10,25 +10,23 @@ internal readonly struct PointerInputSnapshot
         bool isPressed,
         bool isBlockedByUi,
         Vector2 screenPosition,
-        Vector2 normalizedDelta)
+        Vector2 screenDelta)
     {
         IsPressed = isPressed;
         IsBlockedByUi = isBlockedByUi;
         ScreenPosition = screenPosition;
-        NormalizedDelta = normalizedDelta;
+        ScreenDelta = screenDelta;
     }
 
     public bool IsPressed { get; }
     public bool IsBlockedByUi { get; }
     public bool IsGameplayPressed => IsPressed && !IsBlockedByUi;
     public Vector2 ScreenPosition { get; }
-    public Vector2 NormalizedDelta { get; }
+    public Vector2 ScreenDelta { get; }
 }
 
 internal static class PointerInputService
 {
-    private const float ReferenceScreenHeight = 1920f;
-
     private static int lastUpdatedFrame = -1;
     private static bool hasPreviousPosition;
     private static Vector2 previousScreenPosition;
@@ -75,13 +73,10 @@ internal static class PointerInputService
             return currentSnapshot;
         }
 
-        Vector2 normalizedDelta = Vector2.zero;
+        Vector2 screenDelta = Vector2.zero;
         if (hasPreviousPosition)
         {
-            float resolutionScale =
-                ReferenceScreenHeight / Mathf.Max(1f, Screen.height);
-            normalizedDelta =
-                (previousScreenPosition - screenPosition) * resolutionScale;
+            screenDelta = previousScreenPosition - screenPosition;
         }
 
         previousScreenPosition = screenPosition;
@@ -91,7 +86,7 @@ internal static class PointerInputService
                 true,
                 false,
                 screenPosition,
-                normalizedDelta);
+                screenDelta);
         return currentSnapshot;
     }
 
@@ -147,7 +142,7 @@ public class InputAxis : MonoBehaviour
     {
         PointerInputSnapshot snapshot = PointerInputService.Read();
         gameStarted = snapshot.IsGameplayPressed;
-        distanseValue = snapshot.NormalizedDelta;
+        distanseValue = Vector2.zero;
 
         if (!snapshot.IsGameplayPressed)
         {
@@ -170,5 +165,14 @@ public class InputAxis : MonoBehaviour
                 snapshot.ScreenPosition.x,
                 snapshot.ScreenPosition.y,
                 worldPlaneDistance));
+
+        Vector2 previousScreenPosition =
+            snapshot.ScreenPosition + snapshot.ScreenDelta;
+        Vector3 previousWorldPosition = inputCamera.ScreenToWorldPoint(
+            new Vector3(
+                previousScreenPosition.x,
+                previousScreenPosition.y,
+                worldPlaneDistance));
+        distanseValue = previousWorldPosition - pointerWorldPosition;
     }
 }

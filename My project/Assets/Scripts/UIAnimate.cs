@@ -54,8 +54,6 @@ public override void Update()
 
         base.Update();
 
-        bool gameplayActive = GameManager.Instance != null && GameManager.Instance.IsGameplayActive;
-
         // Tutorial mode still needs to reflect live stamina while movement input is being demonstrated.
         if (player != null && staminaUI != null)
         {
@@ -74,7 +72,7 @@ public override void Update()
             IngameUiPos.anchoredPosition -= distanseValue * 2f;
         }
 
-        if (gameplayActive && !animateDone)
+        if (gameStarted && !animateDone)
         {
             float alpha = Mathf.Lerp(pausePannel.color.a, 0, Time.deltaTime / 0.1f);
             pausePannel.color = new Color(pausePannel.color.r, pausePannel.color.g, pausePannel.color.b, alpha);
@@ -84,7 +82,7 @@ public override void Update()
             IngameUiPos.anchoredPosition = Vector3.Lerp(IngameUiPos.anchoredPosition, pos[5], Time.deltaTime / 0.1f);
             staminaPos.anchoredPosition = Vector3.Lerp(staminaPos.anchoredPosition, pos[6], Time.deltaTime / 0.1f);
         }
-        else if (!gameplayActive)
+        else if (!gameStarted)
         {
             float alpha = Mathf.Lerp(pausePannel.color.a, 0.8f, Time.deltaTime / 0.1f);
             pausePannel.color = new Color(pausePannel.color.r, pausePannel.color.g, pausePannel.color.b, alpha);
@@ -95,12 +93,12 @@ public override void Update()
             staminaPos.anchoredPosition = Vector3.Lerp(staminaPos.anchoredPosition, pos[7], Time.deltaTime / 0.1f);
         }
 
-        if (gameplayActive && Vector3.Distance(IngameUiPos.anchoredPosition, pos[5]) <= 8.3f)
+        if (gameStarted && Vector3.Distance(IngameUiPos.anchoredPosition, pos[5]) <= 8.3f)
         {
             animateDone = true;
         }
 
-        if (!gameplayActive && Vector3.Distance(IngameUiPos.anchoredPosition, pos[2]) <= 400.3f)
+        if (!gameStarted && Vector3.Distance(IngameUiPos.anchoredPosition, pos[2]) <= 400.3f)
         {
             animateDone = false;
         }
@@ -180,9 +178,10 @@ public override void Update()
 
         if (gameStarted)
         {
-            ResetReleaseTimeout();
+            releaseElapsedTime = 0f;
             wasScreenHeld = true;
             releaseCountdownRoot.SetActive(false);
+            SetReleaseCountdownProgress(1f);
             return;
         }
 
@@ -192,9 +191,10 @@ public override void Update()
             return;
         }
 
-        releaseElapsedTime += Time.deltaTime;
+        releaseElapsedTime += Time.unscaledDeltaTime;
         releaseCountdownRoot.SetActive(true);
-        releaseCountdownFill.fillAmount = 1f - (releaseElapsedTime / releaseTimeoutDuration);
+        SetReleaseCountdownProgress(
+            1f - (releaseElapsedTime / releaseTimeoutDuration));
         if (releaseElapsedTime >= releaseTimeoutDuration)
         {
             ResetReleaseTimeout();
@@ -208,8 +208,19 @@ public override void Update()
         wasScreenHeld = false;
         if (releaseCountdownFill != null)
         {
-            releaseCountdownFill.fillAmount = 1f;
+            SetReleaseCountdownProgress(1f);
         }
+    }
+
+    private void SetReleaseCountdownProgress(float progress)
+    {
+        float clampedProgress = Mathf.Clamp01(progress);
+        releaseCountdownFill.fillAmount = clampedProgress;
+
+        RectTransform fillRect = releaseCountdownFill.rectTransform;
+        Vector2 anchorMax = fillRect.anchorMax;
+        anchorMax.x = clampedProgress;
+        fillRect.anchorMax = anchorMax;
     }
 
     private void HandleStateChanged(GameState previousState, GameState nextState)

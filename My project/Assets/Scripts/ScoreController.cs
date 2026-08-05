@@ -4,24 +4,26 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class ScoreController : MonoBehaviour
 {
-    public float CurrentScore { get; private set; }
+    public long CurrentScore { get; private set; }
 
-    public event Action<float> ScoreChanged;
+    public event Action<long> ScoreChanged;
 
-    public void AddScore(float amount)
+    public void AddScore(long amount)
     {
-        if (amount <= 0f)
+        if (amount <= 0L)
         {
             return;
         }
 
-        CurrentScore += amount;
+        CurrentScore = amount > long.MaxValue - CurrentScore
+            ? long.MaxValue
+            : CurrentScore + amount;
         ScoreChanged?.Invoke(CurrentScore);
     }
 
     public void ResetScore()
     {
-        CurrentScore = 0f;
+        CurrentScore = 0L;
         ScoreChanged?.Invoke(CurrentScore);
     }
 }
