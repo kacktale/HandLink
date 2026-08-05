@@ -22,6 +22,11 @@ public class StarCreate : InputAxis
     // Update is called once per frame
     public override void Update()
     {
+        if (Player.Instance == null || !Player.Instance.gameStarted)
+        {
+            return;
+        }
+
         base.Update();
         if (!gameStarted) return;
         Vector3 downpos = new Vector3(0,1,0) * Time.deltaTime * starMoveSpeed;

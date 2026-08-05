@@ -1,92 +1,211 @@
 using System;
-using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
+[RequireComponent(typeof(PlayerHealth))]
+[RequireComponent(typeof(PlayerStamina))]
+[RequireComponent(typeof(ScoreController))]
+[RequireComponent(typeof(PlayerUpgradeApplier))]
+[RequireComponent(typeof(PlayerVisual))]
 public class Player : InputAxis
 {
     public static Player Instance;
-    public int hp;
+
     public bool invincible = false;
 
-    public float score;
+    private bool isGameOver;
+    private bool isReadyToPlay;
+    private bool tutorialMovementLocked;
+    private Vector3 basePosition;
+    private PlayerProgression progression;
+    private PlayerHealth health;
+    private PlayerStamina staminaController;
+    private ScoreController scoreController;
+    private PlayerUpgradeApplier upgradeApplier;
+    private PlayerVisual playerVisual;
 
-    public float stamina = 100;
-    public float stunTime = 1.5f;
+    public int hp => health == null ? 0 : health.CurrentHealth;
+    public float score => scoreController == null ? 0f : scoreController.CurrentScore;
+    public float stamina => staminaController == null ? 0f : staminaController.CurrentStamina;
+    public PlayerProgression Progression => progression;
+    public PlayerHealth Health => health;
+    public PlayerStamina Stamina => staminaController;
+    public ScoreController Score => scoreController;
+    public float StaminaNormalized =>
+        staminaController == null ? 0f : staminaController.Normalized;
 
-    private bool isStun = false;
-    private float currentTime;
-    private UiManager uiManager;
+    public event Action<bool> EnemyJudged;
+    public event Func<Vector3, bool> PerfectCoinDropRequested;
+    public event Action<Vector3, int> CoinRewarded;
 
     public void Awake()
     {
         Instance = this;
+        progression = GetComponent<PlayerProgression>();
+        health = GetComponent<PlayerHealth>();
+        staminaController = GetComponent<PlayerStamina>();
+        scoreController = GetComponent<ScoreController>();
+        upgradeApplier = GetComponent<PlayerUpgradeApplier>();
+        playerVisual = GetComponent<PlayerVisual>();
+        basePosition = transform.position;
     }
 
     private void Start()
     {
-        uiManager = UiManager.instance;
-        for (int i = 0; i < hp; i++)
+        upgradeApplier.Apply();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
         {
-            GameObject obj = Instantiate(uiManager.hartObj, transform.position, Quaternion.identity, uiManager.hartUI);
-            uiManager.harts.Add(obj);
+            Instance = null;
         }
     }
 
-    // Update is called once per frame
     public override void Update()
     {
+        if (isGameOver || !isReadyToPlay)
+        {
+            return;
+        }
+
+        if (tutorialMovementLocked)
+        {
+            gameStarted = true;
+            distanseValue = Vector2.zero;
+            return;
+        }
+
         base.Update();
-        if (!isStun)
+
+        if (!staminaController.IsStunned)
         {
-            if (!isPc) transform.position = touch.position;
-            else transform.position = mousePosition;
-            stamina -= MathF.Abs(distanseValue.x + distanseValue.y) / 2;
-            if(stamina <= 0)
-            {
-                currentTime = 0;
-                isStun = true;
-                stamina = 0;
-            }
+            transform.position = pointerWorldPosition;
         }
-        else
+
+        if (!staminaController.Tick(distanseValue, gameStarted, Time.deltaTime))
         {
-            if(!gameStarted) return;
-            currentTime += Time.deltaTime;
-            stamina =  100 * currentTime / stunTime;
-            if(currentTime >= stunTime)
-            {
-                isStun = false;
-                currentTime = 0;
-                stamina = 100;
-            }
+            return;
         }
+
+        playerVisual.RefreshHeartCircleColor();
     }
 
     public void Damage()
     {
-        hp--;
-        uiManager.harts[hp].SetActive(false);
-        if(hp <= 0)
+        if (!isGameOver)
         {
-            gameStarted = false;
-            uiManager.bestScore = Mathf.Max(uiManager.bestScore, score);
-            uiManager.bestScoreTxt.SetText($"{(int)uiManager.bestScore}");
+            health.TakeDamage();
         }
+    }
+
+    public void Heal(int amount)
+    {
+        if (!isGameOver)
+        {
+            health.Heal(amount);
+        }
+    }
+
+    public void EndGame()
+    {
+        isGameOver = true;
+        gameStarted = false;
+        playerVisual.SetGameplayVisible(false);
+    }
+
+    public void BeginGame()
+    {
+        isGameOver = false;
+        isReadyToPlay = true;
+        gameStarted = true;
+        scoreController.ResetScore();
+        transform.position = basePosition;
+        playerVisual.SetGameplayVisible(true);
+        playerVisual.ResetVisual();
+        upgradeApplier.Apply();
+        staminaController.ResetStamina();
+    }
+
+    public void SetTutorialMovementLocked(bool locked)
+    {
+        tutorialMovementLocked = locked;
+        if (locked)
+        {
+            distanseValue = Vector2.zero;
+        }
+    }
+
+    public float GetUpgradeValue(UpgradeType type)
+    {
+        return upgradeApplier.GetUpgradeValue(type);
+    }
+
+    public void ApplyUpgradeStats()
+    {
+        upgradeApplier.Apply();
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (collision.gameObject.CompareTag("Enemy"))
+        if (isGameOver || !collision.gameObject.CompareTag("Enemy"))
         {
-            SpriteRenderer judge = SpawnPivot.Instance.FindJudge();
-            judge.gameObject.transform.position = collision.gameObject.transform.position;
-            score += collision.gameObject.GetComponent<Enemy>().Caculate(judge);
-            uiManager.currentScoreText.SetText($"{(int)score}");
-            if (score > 0) stamina = Math.Min(100,stamina+30);
-            collision.gameObject.SetActive(false);
+            return;
         }
+
+        SpecialEnemy specialEnemy =
+            collision.gameObject.GetComponent<SpecialEnemy>();
+        if (specialEnemy != null && specialEnemy.TryHandlePlayerContact())
+        {
+            return;
+        }
+
+        SpriteRenderer judge = SpawnPivot.Instance.FindJudge();
+        judge.transform.position = collision.transform.position;
+
+        Enemy enemy = collision.gameObject.GetComponent<Enemy>();
+        float awardedScore =
+            enemy.Caculate(out Color judgementColor, out bool isPerfect);
+        scoreController.AddScore(awardedScore);
+        EnemyJudged?.Invoke(isPerfect);
+        judge.color = judgementColor;
+
+        if (isPerfect && !TryHandlePerfectCoinDrop(collision.transform.position))
+        {
+            const int perfectCoinReward = 1;
+            progression.AddCoin(perfectCoinReward);
+            CoinRewarded?.Invoke(collision.transform.position, perfectCoinReward);
+        }
+
+        if (scoreController.CurrentScore > 0f)
+        {
+            staminaController.Restore(30f);
+        }
+
+        collision.gameObject.SetActive(false);
     }
 
-    void TurnOffInvincible() => invincible = false;
+    private bool TryHandlePerfectCoinDrop(Vector3 position)
+    {
+        if (PerfectCoinDropRequested == null)
+        {
+            return false;
+        }
+
+        foreach (Func<Vector3, bool> handler
+                 in PerfectCoinDropRequested.GetInvocationList())
+        {
+            if (handler(position))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void TurnOffInvincible()
+    {
+        invincible = false;
+    }
 }
