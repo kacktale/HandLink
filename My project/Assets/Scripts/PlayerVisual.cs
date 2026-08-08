@@ -1,19 +1,21 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(SpriteRenderer))]
 public sealed class PlayerVisual : MonoBehaviour
 {
-    [SerializeField] private SpriteRenderer hartCircle;
+    [FormerlySerializedAs("hartCircle")]
+    [SerializeField] private SpriteRenderer heartCircle;
 
     private SpriteRenderer coreRenderer;
-    private Color baseHartCircleColor;
+    private Color baseHeartCircleColor;
 
     private void Awake()
     {
         coreRenderer = GetComponent<SpriteRenderer>();
-        baseHartCircleColor =
-            hartCircle != null ? hartCircle.color : Color.white;
+        baseHeartCircleColor =
+            heartCircle != null ? heartCircle.color : Color.white;
     }
 
     public void SetGameplayVisible(bool visible)
@@ -23,24 +25,24 @@ public sealed class PlayerVisual : MonoBehaviour
 
     public void ResetVisual()
     {
-        SetHartCircleColor(baseHartCircleColor);
+        SetHeartCircleColor(baseHeartCircleColor);
     }
 
     public void RefreshHeartCircleColor()
     {
-        if (hartCircle == null)
+        if (heartCircle == null)
         {
             return;
         }
 
         float heartDistance =
-            Vector2.Distance(transform.position, hartCircle.transform.position);
+            Vector2.Distance(transform.position, heartCircle.transform.position);
         float heartRadius =
-            Mathf.Min(hartCircle.bounds.extents.x, hartCircle.bounds.extents.y);
+            Mathf.Min(heartCircle.bounds.extents.x, heartCircle.bounds.extents.y);
 
         if (heartDistance <= heartRadius)
         {
-            SetHartCircleColor(Color.white);
+            SetHeartCircleColor(Color.white);
             return;
         }
 
@@ -49,21 +51,21 @@ public sealed class PlayerVisual : MonoBehaviour
                 heartDistance,
                 out Color judgementColor))
         {
-            SetHartCircleColor(judgementColor);
+            SetHeartCircleColor(judgementColor);
             return;
         }
 
-        SetHartCircleColor(baseHartCircleColor);
+        SetHeartCircleColor(baseHeartCircleColor);
     }
 
-    private void SetHartCircleColor(Color color)
+    private void SetHeartCircleColor(Color color)
     {
-        if (hartCircle == null)
+        if (heartCircle == null)
         {
             return;
         }
 
-        color.a = baseHartCircleColor.a;
-        hartCircle.color = color;
+        color.a = baseHeartCircleColor.a;
+        heartCircle.color = color;
     }
 }

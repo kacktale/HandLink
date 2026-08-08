@@ -7,8 +7,7 @@ public sealed class EnemySpawner : MonoBehaviour
     private Transform target;
     private EnemyPool enemyPool;
     private DifficultyController difficulty;
-    private float pulseEnemyChance;
-    private float healingSpawnInterval;
+    private GameplayAspectController aspectController;
     private float spawnElapsed;
     private float healingElapsed;
 
@@ -17,15 +16,13 @@ public sealed class EnemySpawner : MonoBehaviour
         Transform enemyTarget,
         EnemyPool pool,
         DifficultyController difficultyController,
-        float pulseChance,
-        float healingInterval)
+        GameplayAspectController gameplayAspectController)
     {
         spawnPositions = enemySpawnPositions;
         target = enemyTarget;
         enemyPool = pool;
         difficulty = difficultyController;
-        pulseEnemyChance = Mathf.Clamp01(pulseChance);
-        healingSpawnInterval = Mathf.Max(1f, healingInterval);
+        aspectController = gameplayAspectController;
         ResetSpawner();
     }
 
@@ -44,10 +41,17 @@ public sealed class EnemySpawner : MonoBehaviour
             return;
         }
 
+        difficulty.Tick(deltaTime);
         spawnElapsed += deltaTime;
         healingElapsed += deltaTime;
 
-        if (healingElapsed >= healingSpawnInterval)
+        if (difficulty.IsInitialProtectionActive)
+        {
+            return;
+        }
+
+        if (healingElapsed >= difficulty.HealingSpawnInterval &&
+            difficulty.CanSpawn(enemyPool.ActiveCount))
         {
             Spawn(enemyPool.RentSpecial(SpecialEnemyType.HeartHealer));
             healingElapsed = 0f;
@@ -58,8 +62,13 @@ public sealed class EnemySpawner : MonoBehaviour
             return;
         }
 
+        if (!difficulty.CanSpawn(enemyPool.ActiveCount))
+        {
+            return;
+        }
+
         difficulty.RegisterSpawn(deltaTime);
-        GameObject enemy = Random.value < pulseEnemyChance
+        GameObject enemy = Random.value < difficulty.PulseEnemyChance
             ? enemyPool.RentSpecial(SpecialEnemyType.Pulse)
             : enemyPool.RentNormal(Random.Range(0, enemyPool.NormalTypeCount));
         Spawn(enemy);
@@ -72,18 +81,50 @@ public sealed class EnemySpawner : MonoBehaviour
         healingElapsed = 0f;
     }
 
-    public GameObject SpawnTutorialEnemy(
+public GameObject SpawnTutorialEnemy(
         Vector2 position,
         Vector2 targetPosition,
         float travelDuration)
     {
-        GameObject enemy = enemyPool.RentNormal(0);
+        return ConfigureTutorialEnemy(
+            enemyPool.RentNormal(0),
+            position,
+            targetPosition,
+            travelDuration);
+    }
+
+public GameObject SpawnTutorialSpecialEnemy(
+        SpecialEnemyType type,
+        Vector2 position,
+        Vector2 targetPosition,
+        float travelDuration)
+    {
+        return ConfigureTutorialEnemy(
+            enemyPool.RentSpecial(type),
+            position,
+            targetPosition,
+            travelDuration);
+    }
+
+private static GameObject ConfigureTutorialEnemy(
+        GameObject enemy,
+        Vector2 position,
+        Vector2 targetPosition,
+        float travelDuration)
+    {
         if (enemy == null)
         {
             return null;
         }
 
         enemy.transform.position = position;
+        Vector2 direction = targetPosition - position;
+        if (direction.sqrMagnitude > 0.0001f)
+        {
+            float rotation = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+            enemy.transform.rotation = Quaternion.Euler(0f, 0f, rotation);
+        }
+
         Enemy enemyComponent = enemy.GetComponent<Enemy>();
         if (travelDuration <= 0f)
         {
@@ -98,6 +139,8 @@ public sealed class EnemySpawner : MonoBehaviour
         return enemy;
     }
 
+
+
     private void Spawn(GameObject enemy)
     {
         if (enemy == null || spawnPositions == null || spawnPositions.Length == 0)
@@ -106,10 +149,22 @@ public sealed class EnemySpawner : MonoBehaviour
         }
 
         Transform spawnPosition = spawnPositions[Random.Range(0, spawnPositions.Length)];
-        enemy.transform.position = spawnPosition.position;
-        enemy.GetComponent<Enemy>().SetTravelDuration(
-            target.position,
-            difficulty.EnemyTravelDuration);
+        Vector2 desiredSpawnPosition = spawnPosition.position;
+        Vector2 spawnDirection = desiredSpawnPosition - (Vector2)target.position;
+        if (aspectController != null &&
+            aspectController.TryGetSpawnPosition(spawnDirection, out Vector2 aspectSpawnPosition))
+        {
+            desiredSpawnPosition = aspectSpawnPosition;
+        }
+
+        enemy.transform.position = desiredSpawnPosition;
+        float travelDuration = aspectController == null
+            ? difficulty.EnemyTravelDuration
+            : aspectController.GetAspectAdjustedTravelDuration(
+                desiredSpawnPosition,
+                target.position,
+                difficulty.EnemyTravelDuration);
+        enemy.GetComponent<Enemy>().SetTravelDuration(target.position, travelDuration);
 
         Vector2 direction = target.position - enemy.transform.position;
         float rotation = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;

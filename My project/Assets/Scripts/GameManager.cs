@@ -66,9 +66,47 @@ public sealed class GameManager : MonoBehaviour
             return false;
         }
 
-        
         GameAudio.Instance?.PlayButton();
-isTransitioning = true;
+        return BeginGame();
+    }
+
+    public bool RestartGame()
+    {
+        if (isTransitioning || CurrentState != GameState.GameOver || !ResolveDependencies())
+        {
+            return false;
+        }
+
+        return BeginGame();
+    }
+
+    public bool OpenShop()
+    {
+        if (isTransitioning ||
+            (CurrentState != GameState.MainMenu && CurrentState != GameState.GameOver))
+        {
+            return false;
+        }
+
+        ChangeState(GameState.Shop);
+        return true;
+    }
+
+    public bool ReturnToMainMenu()
+    {
+        if (isTransitioning ||
+            (CurrentState != GameState.GameOver && CurrentState != GameState.Shop))
+        {
+            return false;
+        }
+
+        ChangeState(GameState.MainMenu);
+        return true;
+    }
+
+    private bool BeginGame()
+    {
+        isTransitioning = true;
         enemySpawner.ResetGame();
         player.BeginGame();
         ChangeState(GameState.Playing);
@@ -89,22 +127,11 @@ isTransitioning = true;
 
         isTransitioning = true;
         player.EndGame();
-        
+
         GameAudio.Instance?.PlayGameOver();
-uiManager.SaveGameResult(player);
+        uiManager.SaveGameResult(player);
         ChangeState(GameState.GameOver);
         isTransitioning = false;
-        return true;
-    }
-
-    public bool ReturnToMainMenu()
-    {
-        if (isTransitioning || CurrentState != GameState.GameOver)
-        {
-            return false;
-        }
-
-        ChangeState(GameState.MainMenu);
         return true;
     }
 

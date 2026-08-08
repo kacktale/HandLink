@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,24 +12,33 @@ public sealed class FirstRunTutorial : MonoBehaviour
     private const float StepDisplayDuration = 3f;
     private const float StaminaCompletionThreshold = 0.8f;
     private const float InterfaceFocusScaleMultiplier = 1.6f;
+    private const float InterfaceFocusSmoothSpeed = 8f;
     private const float CameraFocusSizeMultiplier = 0.58f;
     private const float CameraFocusSmoothSpeed = 6f;
-    private const float InterfaceFocusSmoothSpeed = 8f;
     private const float CenterInputRadiusRatio = 0.18f;
     private const float PerfectJudgementDistance = 1.5f;
     private const float CoinPickupDistance = 0.7f;
     private const float CoinPickupDuration = 6f;
+    private const float TutorialSpecialEnemyTravelSpeed = 1.2f;
 
     private GameObject messagePanel;
     private TextMeshProUGUI titleText;
     private TextMeshProUGUI bodyText;
     private TextMeshProUGUI progressText;
+    private Button skipButton;
+    private TextMeshProUGUI skipButtonText;
+    private RectTransform touchTarget;
+    private RectTransform touchPointer;
     private Player player;
     private SpawnPivot spawnPivot;
     private UIAnimate uiAnimate;
     private TutorialStep currentStep = TutorialStep.WaitingForGame;
     private GameObject tutorialEnemy;
     private GameObject tutorialCoin;
+    private int tutorialEnemyIndex;
+    private int tutorialEnemyIntroductionLineIndex;
+    private int tutorialEnemyActionLineIndex;
+    private readonly GameObject[] tutorialEnemyShowcase = new GameObject[3];
     private TMP_FontAsset font;
     private float stepActionTime;
     private float coinExpiryTime;
@@ -37,20 +47,30 @@ public sealed class FirstRunTutorial : MonoBehaviour
     private Canvas canvas;
     private RectTransform canvasRect;
     private GameObject spotlightRoot;
-    private RectTransform[] dimBlocks;
+    private RectTransform worldFocusProxyRoot;
+    private readonly List<Image> worldFocusProxyImages = new List<Image>();
+    private SpriteRenderer[] focusedSpriteRenderers = Array.Empty<SpriteRenderer>();
     private RectTransform staminaGauge;
     private Transform focusedTransform;
     private Vector3 focusedTransformScale;
     private bool isInterfaceFocused;
     private Transform interfaceFocusTransform;
     private Vector3 interfaceFocusTargetScale;
-    private Transform interfaceReleaseTransform;
-    private Vector3 interfaceReleaseTargetScale;
     private float completeFocusReleaseTime;
     private Camera tutorialCamera;
     private Vector3 baseCameraPosition;
     private float baseCameraOrthographicSize;
     private Transform cameraFocusTransform;
+    private RectTransform promotedUiTransform;
+    private Transform promotedUiParent;
+    private int promotedUiSiblingIndex;
+    private Vector2 promotedUiAnchorMin;
+    private Vector2 promotedUiAnchorMax;
+    private Vector2 promotedUiAnchoredPosition;
+    private Vector2 promotedUiSizeDelta;
+    private Vector2 promotedUiPivot;
+    private Quaternion promotedUiLocalRotation;
+    private Vector3 promotedUiLocalScale;
 
     private void Awake()
     {
@@ -93,20 +113,31 @@ public sealed class FirstRunTutorial : MonoBehaviour
             player.SetTutorialMovementLocked(false);
         }
 
+        spawnPivot?.SetTutorialMode(false);
+        uiAnimate?.SetTutorialMode(false);
+        messagePanel?.SetActive(false);
+        SetTouchGuideVisible(false);
+
         RemoveTutorialObjects();
         ResetCameraFocus();
+    }
+
+    private void OnDestroy()
+    {
+        skipButton?.onClick.RemoveListener(SkipTutorial);
     }
 
 private void Update()
     {
         UpdateCameraFocus();
         UpdateInterfaceFocus();
+        UpdateSpotlight();
+        UpdateTouchGuide();
 
         if (currentStep == TutorialStep.Completed)
         {
             if (Time.unscaledTime >= completeFocusReleaseTime &&
-                interfaceFocusTransform == null &&
-                interfaceReleaseTransform == null)
+                interfaceFocusTransform == null)
             {
                 enabled = false;
             }
@@ -160,10 +191,37 @@ private void Update()
                 if (player.StaminaNormalized <= StaminaCompletionThreshold) BeginEnemyIntroduction();
                 break;
             case TutorialStep.EnemyIntroduction:
-                BeginStep(TutorialStep.EnemyApproach);
+                if (tutorialEnemyIntroductionLineIndex == 0)
+                {
+                    tutorialEnemyIntroductionLineIndex = 1;
+                    BeginStep(TutorialStep.EnemyIntroduction);
+                }
+                else
+                {
+                    tutorialEnemyActionLineIndex = 0;
+                    BeginStep(TutorialStep.EnemyApproach);
+                }
                 break;
             case TutorialStep.EnemyApproach:
-                if (tutorialEnemy != null && !tutorialEnemy.activeInHierarchy) BeginStep(TutorialStep.JudgementIntroduction);
+                if (tutorialEnemyIndex > 0 && tutorialEnemyActionLineIndex == 0)
+                {
+                    tutorialEnemyActionLineIndex = 1;
+                    BeginStep(TutorialStep.EnemyApproach);
+                    break;
+                }
+
+                if (tutorialEnemy != null && !tutorialEnemy.activeInHierarchy)
+                {
+                    if (tutorialEnemyIndex < 2)
+                    {
+                        SelectTutorialEnemy(tutorialEnemyIndex + 1);
+                        BeginCurrentEnemyIntroduction();
+                    }
+                    else
+                    {
+                        BeginStep(TutorialStep.JudgementIntroduction);
+                    }
+                }
                 break;
             case TutorialStep.JudgementIntroduction:
                 BeginStep(TutorialStep.PerfectJudgement);
@@ -173,7 +231,48 @@ private void Update()
                 SpawnPerfectJudgementEnemy();
                 SetFocusForStep(TutorialStep.PerfectEnemyDefeat);
                 break;
+            case TutorialStep.ProgressionIntroduction:
+                CompleteTutorial();
+                break;
         }
+    }
+
+    public bool ReplayTutorial()
+    {
+        GameManager gameManager = GameManager.Instance;
+        if (gameManager == null || gameManager.CurrentState != GameState.MainMenu)
+        {
+            return false;
+        }
+
+        player = Player.Instance;
+        spawnPivot = SpawnPivot.Instance;
+        if (player == null || spawnPivot == null)
+        {
+            return false;
+        }
+
+        PlayerPrefs.SetInt(CompletionPreferenceKey, 0);
+        PlayerPrefs.Save();
+        currentStep = TutorialStep.WaitingForGame;
+        tutorialEnemyIndex = 0;
+        tutorialEnemyIntroductionLineIndex = 0;
+        tutorialEnemyActionLineIndex = 0;
+        stepActionTime = 0f;
+        RemoveTutorialObjects();
+        messagePanel.SetActive(false);
+        enabled = true;
+        SubscribeToPlayer();
+
+        if (gameManager.StartGame())
+        {
+            return true;
+        }
+
+        PlayerPrefs.SetInt(CompletionPreferenceKey, 1);
+        PlayerPrefs.Save();
+        enabled = false;
+        return false;
     }
 
     private void BeginTutorial()
@@ -188,18 +287,146 @@ private void Update()
         BeginStep(TutorialStep.HoldScreen);
     }
 
-    private void BeginEnemyIntroduction()
+private void BeginEnemyIntroduction()
     {
-        Vector2 enemyPosition = player.transform.position + Vector3.up * 3.5f;
-        tutorialEnemy = spawnPivot.SpawnTutorialEnemy(enemyPosition, enemyPosition + Vector2.up * 10f, 0f);
+        tutorialEnemyIndex = 0;
+        SpawnCurrentTutorialEnemy();
+        BeginCurrentEnemyIntroduction();
+    }
+
+    private void BeginCurrentEnemyIntroduction()
+    {
+        tutorialEnemyIntroductionLineIndex = 0;
+        tutorialEnemyActionLineIndex = 0;
         BeginStep(TutorialStep.EnemyIntroduction);
     }
+
+private void SpawnCurrentTutorialEnemy()
+    {
+        if (player == null || spawnPivot == null)
+        {
+            return;
+        }
+
+        for (int index = 0; index < tutorialEnemyShowcase.Length; index++)
+        {
+            if (tutorialEnemyShowcase[index] != null)
+            {
+                tutorialEnemyShowcase[index].SetActive(false);
+            }
+
+            Vector2 position = GetTutorialShowcasePosition(index);
+            Vector2 targetPosition = spawnPivot.TutorialTargetPosition;
+            tutorialEnemyShowcase[index] = index switch
+            {
+                0 => spawnPivot.SpawnTutorialEnemy(position, targetPosition, 0f),
+                1 => spawnPivot.SpawnTutorialSpecialEnemy(
+                    SpecialEnemyType.Pulse,
+                    position,
+                    targetPosition,
+                    0f),
+                _ => spawnPivot.SpawnTutorialSpecialEnemy(
+                    SpecialEnemyType.HeartHealer,
+                    position,
+                    targetPosition,
+                    0f)
+            };
+        }
+
+        SelectTutorialEnemy(0);
+    }
+
+private Vector2 GetTutorialShowcasePosition(int index)
+    {
+        float cameraSize = baseCameraOrthographicSize > 0f
+            ? baseCameraOrthographicSize
+            : (tutorialCamera != null ? tutorialCamera.orthographicSize : 5f);
+        float halfWidth = cameraSize * (tutorialCamera != null ? tutorialCamera.aspect : 0.56f);
+        Vector2 center = new Vector2(baseCameraPosition.x, baseCameraPosition.y);
+        return index switch
+        {
+            0 => center + new Vector2(-halfWidth * 0.44f, cameraSize * 0.24f),
+            1 => center + new Vector2(halfWidth * 0.44f, cameraSize * 0.24f),
+            _ => center + new Vector2(0f, cameraSize * 0.50f)
+        };
+    }
+
+private void SelectTutorialEnemy(int index)
+    {
+        tutorialEnemyIndex = index;
+        for (int enemyIndex = 0; enemyIndex < tutorialEnemyShowcase.Length; enemyIndex++)
+        {
+            GameObject enemy = tutorialEnemyShowcase[enemyIndex];
+            if (enemy == null || !enemy.activeInHierarchy)
+            {
+                continue;
+            }
+
+            bool isCurrentEnemy = enemyIndex == tutorialEnemyIndex;
+            bool allowPlayerContact = isCurrentEnemy && tutorialEnemyIndex == 0;
+            foreach (Collider2D collider in enemy.GetComponents<Collider2D>())
+            {
+                collider.enabled = allowPlayerContact;
+            }
+
+            SpecialEnemy specialEnemy = enemy.GetComponent<SpecialEnemy>();
+            if (specialEnemy != null)
+            {
+                specialEnemy.enabled = false;
+            }
+
+            if (isCurrentEnemy && tutorialEnemyIndex > 0)
+            {
+                Enemy enemyComponent = enemy.GetComponent<Enemy>();
+                if (enemyComponent != null)
+                {
+                    enemyComponent.targetPos = spawnPivot.TutorialTargetPosition;
+                    enemyComponent.speed = 0f;
+                }
+            }
+        }
+
+        tutorialEnemy = tutorialEnemyShowcase[tutorialEnemyIndex];
+    }
+
+    private void StartCurrentSpecialEnemyTravel()
+    {
+        if (tutorialEnemyIndex == 0 || tutorialEnemy == null)
+        {
+            return;
+        }
+
+        Enemy enemyComponent = tutorialEnemy.GetComponent<Enemy>();
+        if (enemyComponent != null)
+        {
+            enemyComponent.targetPos = spawnPivot.TutorialTargetPosition;
+            enemyComponent.speed = TutorialSpecialEnemyTravelSpeed;
+        }
+
+        SpecialEnemy specialEnemy = tutorialEnemy.GetComponent<SpecialEnemy>();
+        if (specialEnemy != null)
+        {
+            specialEnemy.enabled = true;
+        }
+    }
+
+
 
     private void BeginStep(TutorialStep nextStep)
     {
         currentStep = nextStep;
-        player.SetTutorialMovementLocked(!IsImmediateInputStep(nextStep));
-        stepActionTime = Time.unscaledTime + (RequiresThreeSecondDisplay(nextStep) ? StepDisplayDuration : 0f);
+        bool isSpecialEnemyInstruction = nextStep == TutorialStep.EnemyApproach && tutorialEnemyIndex > 0;
+        bool allowTutorialMovement = IsImmediateInputStep(nextStep) &&
+            (nextStep != TutorialStep.EnemyApproach || tutorialEnemyIndex == 0);
+        player.SetTutorialMovementLocked(!allowTutorialMovement);
+
+        if (isSpecialEnemyInstruction && tutorialEnemyActionLineIndex == 0)
+        {
+            StartCurrentSpecialEnemyTravel();
+        }
+
+        bool requiresDisplayDelay = RequiresThreeSecondDisplay(nextStep) || isSpecialEnemyInstruction;
+        stepActionTime = Time.unscaledTime + (requiresDisplayDelay ? StepDisplayDuration : 0f);
         ShowMessage(nextStep);
         SetFocusForStep(nextStep);
     }
@@ -227,8 +454,14 @@ private bool HandlePerfectCoinDrop(Vector3 position)
             UiManager.instance.ShowCoinReward(position, perfectCoinReward);
         }
 
-        CompleteTutorial();
+        BeginStep(TutorialStep.ProgressionIntroduction);
         return true;
+    }
+
+    private void SkipTutorial()
+    {
+        GameAudio.Instance?.PlayButton();
+        CompleteTutorial();
     }
 
     private void CreateTutorialCoin()
@@ -268,7 +501,7 @@ private bool HandlePerfectCoinDrop(Vector3 position)
 
 private void CompleteTutorial()
     {
-        ClearFocus();
+        RemoveTutorialObjects();
         PlayerPrefs.SetInt(CompletionPreferenceKey, 1);
         PlayerPrefs.Save();
         messagePanel.SetActive(false);
@@ -294,9 +527,17 @@ private void CompleteTutorial()
         isSubscribed = true;
     }
 
-    private void RemoveTutorialObjects()
+private void RemoveTutorialObjects()
     {
         ClearFocus();
+
+        foreach (GameObject showcaseEnemy in tutorialEnemyShowcase)
+        {
+            if (showcaseEnemy != null)
+            {
+                showcaseEnemy.SetActive(false);
+            }
+        }
 
         if (tutorialEnemy != null)
         {
@@ -350,7 +591,8 @@ private void CompleteTutorial()
         return step == TutorialStep.StaminaIntroduction ||
                step == TutorialStep.EnemyIntroduction ||
                step == TutorialStep.JudgementIntroduction ||
-               step == TutorialStep.PerfectJudgement;
+               step == TutorialStep.PerfectJudgement ||
+               step == TutorialStep.ProgressionIntroduction;
     }
 
     private void SetFocusForStep(TutorialStep step)
@@ -376,47 +618,47 @@ private void SetFocus(Transform nextFocus)
         }
 
         focusedTransform = nextFocus;
-        if (nextFocus is RectTransform)
+        isInterfaceFocused = nextFocus is RectTransform;
+        if (!isInterfaceFocused)
         {
-            if (interfaceReleaseTransform == nextFocus)
-            {
-                focusedTransformScale = interfaceReleaseTargetScale;
-                interfaceReleaseTransform = null;
-            }
-            else
-            {
-                focusedTransformScale = nextFocus.localScale;
-            }
-
-            float yFocusMultiplier = nextFocus == staminaGauge
-                ? InterfaceFocusScaleMultiplier * 2f
-                : InterfaceFocusScaleMultiplier;
-
-            isInterfaceFocused = true;
-            interfaceFocusTransform = nextFocus;
-            interfaceFocusTargetScale = new Vector3(
-                focusedTransformScale.x * InterfaceFocusScaleMultiplier,
-                focusedTransformScale.y * yFocusMultiplier,
-                focusedTransformScale.z);
+            cameraFocusTransform = nextFocus;
+            ConfigureWorldFocusProxy(nextFocus);
+            spotlightRoot?.SetActive(true);
             return;
         }
 
-        isInterfaceFocused = false;
-        cameraFocusTransform = nextFocus;
+        PromoteFocusedUi((RectTransform)nextFocus);
+
+        focusedTransformScale = nextFocus.localScale;
+
+        float yFocusMultiplier = nextFocus == staminaGauge
+            ? InterfaceFocusScaleMultiplier * 2f
+            : InterfaceFocusScaleMultiplier;
+
+        interfaceFocusTransform = nextFocus;
+        interfaceFocusTargetScale = new Vector3(
+            focusedTransformScale.x * InterfaceFocusScaleMultiplier,
+            focusedTransformScale.y * yFocusMultiplier,
+            focusedTransformScale.z);
     }
 
-private void ClearFocus()
+    private void ClearFocus()
     {
         if (interfaceFocusTransform != null)
         {
-            interfaceReleaseTransform = interfaceFocusTransform;
-            interfaceReleaseTargetScale = focusedTransformScale;
+            interfaceFocusTransform.localScale = focusedTransformScale;
             interfaceFocusTransform = null;
+            RestorePromotedUi();
         }
 
         focusedTransform = null;
         isInterfaceFocused = false;
         cameraFocusTransform = null;
+        focusedSpriteRenderers = Array.Empty<SpriteRenderer>();
+        if (worldFocusProxyRoot != null)
+        {
+            worldFocusProxyRoot.gameObject.SetActive(false);
+        }
         if (spotlightRoot != null)
         {
             spotlightRoot.SetActive(false);
@@ -430,18 +672,36 @@ private void ClearFocus()
             return;
         }
 
-        Vector3 desiredPosition = baseCameraPosition;
-        float desiredSize = baseCameraOrthographicSize;
+        Vector3 targetPosition = baseCameraPosition;
+        float targetSize = baseCameraOrthographicSize;
         if (cameraFocusTransform != null)
         {
-            desiredPosition = cameraFocusTransform.position;
-            desiredPosition.z = baseCameraPosition.z;
-            desiredSize = baseCameraOrthographicSize * CameraFocusSizeMultiplier;
+            targetPosition = cameraFocusTransform.position;
+            targetPosition.z = baseCameraPosition.z;
+            targetSize = baseCameraOrthographicSize * CameraFocusSizeMultiplier;
         }
 
         float blend = 1f - Mathf.Exp(-CameraFocusSmoothSpeed * Time.unscaledDeltaTime);
-        tutorialCamera.transform.position = Vector3.Lerp(tutorialCamera.transform.position, desiredPosition, blend);
-        tutorialCamera.orthographicSize = Mathf.Lerp(tutorialCamera.orthographicSize, desiredSize, blend);
+        tutorialCamera.transform.position = Vector3.Lerp(
+            tutorialCamera.transform.position,
+            targetPosition,
+            blend);
+        tutorialCamera.orthographicSize = Mathf.Lerp(
+            tutorialCamera.orthographicSize,
+            targetSize,
+            blend);
+    }
+
+    private void ResetCameraFocus()
+    {
+        if (tutorialCamera == null || !tutorialCamera.orthographic)
+        {
+            return;
+        }
+
+        cameraFocusTransform = null;
+        tutorialCamera.transform.position = baseCameraPosition;
+        tutorialCamera.orthographicSize = baseCameraOrthographicSize;
     }
 
 private void UpdateInterfaceFocus()
@@ -456,30 +716,6 @@ private void UpdateInterfaceFocus()
                 blend);
         }
 
-        if (interfaceReleaseTransform != null)
-        {
-            interfaceReleaseTransform.localScale = Vector3.Lerp(
-                interfaceReleaseTransform.localScale,
-                interfaceReleaseTargetScale,
-                blend);
-
-            if (Vector3.Distance(interfaceReleaseTransform.localScale, interfaceReleaseTargetScale) <= 0.01f)
-            {
-                interfaceReleaseTransform.localScale = interfaceReleaseTargetScale;
-                interfaceReleaseTransform = null;
-            }
-        }
-    }
-
-    private void ResetCameraFocus()
-    {
-        if (tutorialCamera == null || !tutorialCamera.orthographic)
-        {
-            return;
-        }
-
-        tutorialCamera.transform.position = baseCameraPosition;
-        tutorialCamera.orthographicSize = baseCameraOrthographicSize;
     }
 
     private void BuildSpotlight()
@@ -489,101 +725,273 @@ private void UpdateInterfaceFocus()
             return;
         }
 
-        spotlightRoot = new GameObject("TutorialSpotlight", typeof(RectTransform));
-        RectTransform spotlightRect = spotlightRoot.GetComponent<RectTransform>();
-        spotlightRect.SetParent(transform, false);
-        spotlightRect.anchorMin = Vector2.zero;
-        spotlightRect.anchorMax = Vector2.one;
-        spotlightRect.offsetMin = Vector2.zero;
-        spotlightRect.offsetMax = Vector2.zero;
+        spotlightRoot = new GameObject(
+            "TutorialFocusOverlay",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image));
+        RectTransform overlayRect = spotlightRoot.GetComponent<RectTransform>();
+        overlayRect.SetParent(transform, false);
+        SetStretch(overlayRect);
 
-        dimBlocks = new RectTransform[4];
-        dimBlocks[0] = CreateDimBlock("Top");
-        dimBlocks[1] = CreateDimBlock("Bottom");
-        dimBlocks[2] = CreateDimBlock("Left");
-        dimBlocks[3] = CreateDimBlock("Right");
+        Image overlayImage = spotlightRoot.GetComponent<Image>();
+        overlayImage.color = new Color(0f, 0f, 0f, 0.82f);
+        overlayImage.raycastTarget = false;
+
+        GameObject proxyObject = new GameObject(
+            "TutorialWorldFocusProxy",
+            typeof(RectTransform));
+        worldFocusProxyRoot = proxyObject.GetComponent<RectTransform>();
+        worldFocusProxyRoot.SetParent(transform, false);
+        SetStretch(worldFocusProxyRoot);
+        proxyObject.SetActive(false);
         spotlightRoot.SetActive(false);
     }
 
-    private RectTransform CreateDimBlock(string name)
+    private static void SetStretch(RectTransform rect)
     {
-        GameObject block = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        RectTransform rect = block.GetComponent<RectTransform>();
-        rect.SetParent(spotlightRoot.transform, false);
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+    }
+
+    private void BuildTouchGuide()
+    {
+        TextMeshProUGUI targetText = CreateOverlayText(
+            "TutorialTouchTarget",
+            "◎",
+            104f,
+            new Color(0.35f, 0.85f, 1f, 0.9f));
+        touchTarget = targetText.rectTransform;
+
+        TextMeshProUGUI pointerText = CreateOverlayText(
+            "TutorialTouchPointer",
+            "●",
+            54f,
+            new Color(1f, 0.82f, 0.22f, 0.95f));
+        touchPointer = pointerText.rectTransform;
+        SetTouchGuideVisible(false);
+    }
+
+    private TextMeshProUGUI CreateOverlayText(
+        string objectName,
+        string value,
+        float fontSize,
+        Color color)
+    {
+        GameObject textObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI));
+        RectTransform rect = textObject.GetComponent<RectTransform>();
+        rect.SetParent(transform, false);
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = new Vector2(160f, 160f);
 
-        Image image = block.GetComponent<Image>();
-        image.color = new Color(0f, 0f, 0f, 0.7f);
-        image.raycastTarget = false;
-        return rect;
+        TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
+        text.font = font;
+        text.fontSize = fontSize;
+        text.alignment = TextAlignmentOptions.Center;
+        text.color = color;
+        text.raycastTarget = false;
+        text.SetText(value);
+        return text;
     }
 
-    private void UpdateSpotlight()
+    private void UpdateTouchGuide()
     {
-        if (focusedTransform == null || spotlightRoot == null || !TryGetFocusRect(out Rect focusRect))
+        bool shouldShow = currentStep == TutorialStep.HoldScreen ||
+                          currentStep == TutorialStep.MoveFingerToCenter;
+        if (touchTarget == null || touchPointer == null || canvas == null)
         {
             return;
         }
 
-        const float padding = 90f;
-        Rect canvasBounds = canvasRect.rect;
-        float xMin = Mathf.Clamp(focusRect.xMin - padding, canvasBounds.xMin, canvasBounds.xMax);
-        float xMax = Mathf.Clamp(focusRect.xMax + padding, canvasBounds.xMin, canvasBounds.xMax);
-        float yMin = Mathf.Clamp(focusRect.yMin - padding, canvasBounds.yMin, canvasBounds.yMax);
-        float yMax = Mathf.Clamp(focusRect.yMax + padding, canvasBounds.yMin, canvasBounds.yMax);
+        touchTarget.gameObject.SetActive(shouldShow);
+        if (!shouldShow)
+        {
+            touchPointer.gameObject.SetActive(false);
+            return;
+        }
 
-        SetDimBlock(dimBlocks[0], new Vector2(0f, (yMax + canvasBounds.yMax) * 0.5f), new Vector2(canvasBounds.width, canvasBounds.yMax - yMax));
-        SetDimBlock(dimBlocks[1], new Vector2(0f, (yMin + canvasBounds.yMin) * 0.5f), new Vector2(canvasBounds.width, yMin - canvasBounds.yMin));
-        SetDimBlock(dimBlocks[2], new Vector2((xMin + canvasBounds.xMin) * 0.5f, 0f), new Vector2(xMin - canvasBounds.xMin, canvasBounds.height));
-        SetDimBlock(dimBlocks[3], new Vector2((xMax + canvasBounds.xMax) * 0.5f, 0f), new Vector2(canvasBounds.xMax - xMax, canvasBounds.height));
+        float pulse = 1f + Mathf.Sin(Time.unscaledTime * 5f) * 0.1f;
+        touchTarget.localScale = Vector3.one * pulse;
+
+        PointerInputSnapshot snapshot = PointerInputService.Read();
+        touchPointer.gameObject.SetActive(snapshot.IsGameplayPressed);
+        if (!snapshot.IsGameplayPressed || canvasRect == null)
+        {
+            return;
+        }
+
+        Camera canvasCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay
+            ? null
+            : canvas.worldCamera;
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect,
+                snapshot.ScreenPosition,
+                canvasCamera,
+                out Vector2 localPoint))
+        {
+            touchPointer.anchoredPosition = localPoint;
+        }
     }
 
-    private bool TryGetFocusRect(out Rect focusRect)
+    private void SetTouchGuideVisible(bool visible)
     {
-        Camera canvasCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-        if (focusedTransform is RectTransform focusRectTransform)
+        touchTarget?.gameObject.SetActive(visible);
+        touchPointer?.gameObject.SetActive(false);
+    }
+
+    private void UpdateSpotlight()
+    {
+        if (spotlightRoot == null || tutorialCamera == null || !spotlightRoot.activeSelf)
         {
-            Vector3[] corners = new Vector3[4];
-            focusRectTransform.GetWorldCorners(corners);
-            Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
-            Vector2 max = new Vector2(float.MinValue, float.MinValue);
-            foreach (Vector3 corner in corners)
+            return;
+        }
+
+        if (focusedSpriteRenderers.Length == 0 || worldFocusProxyRoot == null)
+        {
+            return;
+        }
+
+        float canvasScale = canvas != null ? Mathf.Max(0.0001f, canvas.scaleFactor) : 1f;
+        float canvasUnitsPerWorldUnit = tutorialCamera.pixelHeight /
+            (tutorialCamera.orthographicSize * 2f * canvasScale);
+        Camera canvasCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? canvas.worldCamera
+            : null;
+
+        for (int index = 0; index < focusedSpriteRenderers.Length; index++)
+        {
+            SpriteRenderer source = focusedSpriteRenderers[index];
+            Image proxy = worldFocusProxyImages[index];
+            bool visible = source != null && source.enabled && source.gameObject.activeInHierarchy && source.sprite != null;
+            proxy.gameObject.SetActive(visible);
+            if (!visible)
             {
-                Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(canvasCamera, corner);
-                RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screenPoint, canvasCamera, out Vector2 localPoint);
-                min = Vector2.Min(min, localPoint);
-                max = Vector2.Max(max, localPoint);
+                continue;
             }
 
-            focusRect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
-            return true;
-        }
+            proxy.sprite = source.sprite;
+            proxy.color = source.color;
+            RectTransform proxyRect = proxy.rectTransform;
+            Vector2 screenPosition = tutorialCamera.WorldToScreenPoint(source.transform.position);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect,
+                screenPosition,
+                canvasCamera,
+                out Vector2 localPosition);
+            proxyRect.anchoredPosition = localPosition;
 
-        Camera worldCamera = Camera.main;
-        if (worldCamera == null)
-        {
-            focusRect = default;
-            return false;
+            Vector3 lossyScale = source.transform.lossyScale;
+            Vector2 spriteSize = source.sprite.bounds.size;
+            proxyRect.sizeDelta = new Vector2(
+                spriteSize.x * Mathf.Abs(lossyScale.x) * canvasUnitsPerWorldUnit,
+                spriteSize.y * Mathf.Abs(lossyScale.y) * canvasUnitsPerWorldUnit);
+            proxyRect.pivot = new Vector2(
+                source.sprite.pivot.x / source.sprite.rect.width,
+                source.sprite.pivot.y / source.sprite.rect.height);
+            proxyRect.localRotation = Quaternion.Euler(0f, 0f, source.transform.eulerAngles.z);
+            proxyRect.localScale = new Vector3(source.flipX ? -1f : 1f, source.flipY ? -1f : 1f, 1f);
         }
-
-        Vector2 screenPosition = worldCamera.WorldToScreenPoint(focusedTransform.position);
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screenPosition, canvasCamera, out Vector2 localPosition);
-        focusRect = new Rect(localPosition - Vector2.one * 110f, Vector2.one * 220f);
-        return true;
     }
 
-    private static void SetDimBlock(RectTransform block, Vector2 position, Vector2 size)
+    private void ConfigureWorldFocusProxy(Transform target)
     {
-        block.gameObject.SetActive(size.x > 0f && size.y > 0f);
-        block.anchoredPosition = position;
-        block.sizeDelta = size;
+        focusedSpriteRenderers = target.GetComponentsInChildren<SpriteRenderer>(true);
+        Array.Sort(focusedSpriteRenderers, CompareSpriteRenderers);
+        EnsureWorldFocusProxyCapacity(focusedSpriteRenderers.Length);
+
+        for (int index = 0; index < worldFocusProxyImages.Count; index++)
+        {
+            worldFocusProxyImages[index].gameObject.SetActive(index < focusedSpriteRenderers.Length);
+        }
+
+        worldFocusProxyRoot.gameObject.SetActive(true);
+    }
+
+    private void EnsureWorldFocusProxyCapacity(int requiredCount)
+    {
+        while (worldFocusProxyImages.Count < requiredCount)
+        {
+            GameObject proxyObject = new GameObject(
+                $"FocusSprite{worldFocusProxyImages.Count}",
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(Image));
+            RectTransform rect = proxyObject.GetComponent<RectTransform>();
+            rect.SetParent(worldFocusProxyRoot, false);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+
+            Image image = proxyObject.GetComponent<Image>();
+            image.raycastTarget = false;
+            image.preserveAspect = false;
+            worldFocusProxyImages.Add(image);
+        }
+    }
+
+    private static int CompareSpriteRenderers(SpriteRenderer left, SpriteRenderer right)
+    {
+        int layerComparison = SortingLayer.GetLayerValueFromID(left.sortingLayerID)
+            .CompareTo(SortingLayer.GetLayerValueFromID(right.sortingLayerID));
+        return layerComparison != 0
+            ? layerComparison
+            : left.sortingOrder.CompareTo(right.sortingOrder);
+    }
+
+    private void PromoteFocusedUi(RectTransform target)
+    {
+        RestorePromotedUi();
+        promotedUiTransform = target;
+        promotedUiParent = target.parent;
+        promotedUiSiblingIndex = target.GetSiblingIndex();
+        promotedUiAnchorMin = target.anchorMin;
+        promotedUiAnchorMax = target.anchorMax;
+        promotedUiAnchoredPosition = target.anchoredPosition;
+        promotedUiSizeDelta = target.sizeDelta;
+        promotedUiPivot = target.pivot;
+        promotedUiLocalRotation = target.localRotation;
+        promotedUiLocalScale = target.localScale;
+
+        target.SetParent(transform, true);
+        target.SetSiblingIndex(worldFocusProxyRoot.GetSiblingIndex() + 1);
+        spotlightRoot.SetActive(true);
+        worldFocusProxyRoot.gameObject.SetActive(false);
+        focusedTransformScale = target.localScale;
+    }
+
+    private void RestorePromotedUi()
+    {
+        if (promotedUiTransform == null || promotedUiParent == null)
+        {
+            promotedUiTransform = null;
+            return;
+        }
+
+        promotedUiTransform.SetParent(promotedUiParent, false);
+        promotedUiTransform.SetSiblingIndex(promotedUiSiblingIndex);
+        promotedUiTransform.anchorMin = promotedUiAnchorMin;
+        promotedUiTransform.anchorMax = promotedUiAnchorMax;
+        promotedUiTransform.anchoredPosition = promotedUiAnchoredPosition;
+        promotedUiTransform.sizeDelta = promotedUiSizeDelta;
+        promotedUiTransform.pivot = promotedUiPivot;
+        promotedUiTransform.localRotation = promotedUiLocalRotation;
+        promotedUiTransform.localScale = promotedUiLocalScale;
+        promotedUiTransform = null;
+        promotedUiParent = null;
     }
 
     private void ShowMessage(TutorialStep step)
     {
         bool isKorean = CurrentLanguage == GameLanguage.Korean;
+        skipButtonText?.SetText(isKorean ? "건너뛰기" : "SKIP");
         if (step == TutorialStep.HoldScreen)
         {
             titleText.SetText(isKorean ? "튜토리얼" : "TUTORIAL");
@@ -600,14 +1008,24 @@ private void UpdateInterfaceFocus()
             return;
         }
 
-        bodyText.fontSizeMin = step == TutorialStep.EnemyIntroduction ? 18f : 26f;
-        bodyText.fontSizeMax = step == TutorialStep.EnemyIntroduction ? 38f : 46f;
+        bodyText.fontSizeMin = 26f;
+        bodyText.fontSizeMax = 46f;
         if (step == TutorialStep.EnemyIntroduction)
         {
-            titleText.SetText(isKorean ? "튜토리얼" : "TUTORIAL");
-            bodyText.SetText(isKorean
-                ? "적은 세 종류입니다.\n일반 적은 플레이어를 향해 다가옵니다.\n빨간 펄스 적은 가까이에서 파동 공격, 초록 회복 적은 도착 시 체력을 회복합니다."
-                : "There are three enemy types.\nNormal enemies approach you. Red Pulse enemies attack nearby; green Healer enemies restore health when they arrive.");
+            titleText.SetText(isKorean ? "적 소개" : "ENEMY INTRODUCTION");
+            string enemyIntroKorean = tutorialEnemyIndex switch
+            {
+                0 => tutorialEnemyIntroductionLineIndex == 0 ? "이것은 일반 적입니다." : "플레이어를 향해 다가옵니다.",
+                1 => tutorialEnemyIntroductionLineIndex == 0 ? "이것은 펄스 적입니다." : "빨간색으로 깜빡인 뒤 파동 공격을 합니다.",
+                _ => tutorialEnemyIntroductionLineIndex == 0 ? "이것은 회복 적입니다." : "심장에 닿으면 체력을 1 회복합니다."
+            };
+            string enemyIntroEnglish = tutorialEnemyIndex switch
+            {
+                0 => tutorialEnemyIntroductionLineIndex == 0 ? "This is a Normal Enemy." : "It moves toward the player.",
+                1 => tutorialEnemyIntroductionLineIndex == 0 ? "This is a Pulse Enemy." : "It flashes red, then attacks with a pulse.",
+                _ => tutorialEnemyIntroductionLineIndex == 0 ? "This is a Healer Enemy." : "It restores 1 health when it reaches the heart."
+            };
+            bodyText.SetText(isKorean ? enemyIntroKorean : enemyIntroEnglish);
             progressText.SetText("3 / 7");
             return;
         }
@@ -615,7 +1033,27 @@ private void UpdateInterfaceFocus()
         if (step == TutorialStep.EnemyApproach)
         {
             titleText.SetText(isKorean ? "튜토리얼" : "TUTORIAL");
-            bodyText.SetText(isKorean ? "손가락을 움직여 적에게 다가가 처치해보세요" : "Move your finger to the enemy and defeat it.");
+            string koreanInstruction = tutorialEnemyIndex switch
+            {
+                0 => "일반 적에게 가까이 가서 처치해보세요.",
+                1 => tutorialEnemyActionLineIndex == 0
+                    ? "펄스 적이 심장 쪽에 도착하게 두세요."
+                    : "파동에 닿으면 체력을 잃습니다.",
+                _ => tutorialEnemyActionLineIndex == 0
+                    ? "회복 적이 심장 쪽에 도착하게 두세요."
+                    : "도착하면 체력이 1 회복됩니다."
+            };
+            string englishInstruction = tutorialEnemyIndex switch
+            {
+                0 => "Move closer to the Normal Enemy and defeat it.",
+                1 => tutorialEnemyActionLineIndex == 0
+                    ? "Let the Pulse Enemy reach the heart."
+                    : "Touching its pulse costs health.",
+                _ => tutorialEnemyActionLineIndex == 0
+                    ? "Let the Healer Enemy reach the heart."
+                    : "It restores 1 health on arrival."
+            };
+            bodyText.SetText(isKorean ? koreanInstruction : englishInstruction);
             progressText.SetText("4 / 7");
             return;
         }
@@ -624,6 +1062,16 @@ private void UpdateInterfaceFocus()
         {
             titleText.SetText(isKorean ? "튜토리얼" : "TUTORIAL");
             bodyText.SetText(isKorean ? "퍼펙트 판정으로 적을 처치하면 코인이 자동 지급됩니다." : "Defeat the enemy with a PERFECT judgement to receive a coin automatically.");
+            progressText.SetText("7 / 7");
+            return;
+        }
+
+        if (step == TutorialStep.ProgressionIntroduction)
+        {
+            titleText.SetText(isKorean ? "코인과 업그레이드" : "COINS & UPGRADES");
+            bodyText.SetText(isKorean
+                ? "획득한 코인은 게임 종료 후 상점에서 능력을 강화할 때 사용합니다."
+                : "Use earned coins in the shop after a run to upgrade your abilities.");
             progressText.SetText("7 / 7");
             return;
         }
@@ -654,10 +1102,19 @@ private void UpdateInterfaceFocus()
         titleText.SetText(isKorean ? "튜토리얼" : "TUTORIAL");
         bodyText.SetText(isKorean ? koreanText : englishText);
         int stepNumber = GetStepNumber(step);
-        progressText.SetText(stepNumber == 0 ? string.Empty : $"{stepNumber} / 7");
+        if (stepNumber == 0)
+        {
+            progressText.SetText(string.Empty);
+        }
+        else
+        {
+            progressText.SetText("{0} / 7", stepNumber);
+        }
     }
 
-private void BuildUserInterface()
+
+
+    private void BuildUserInterface()
     {
         font = GetComponentInChildren<TextMeshProUGUI>(true)?.font ?? TMP_Settings.defaultFontAsset;
         if (font == null)
@@ -665,6 +1122,12 @@ private void BuildUserInterface()
             Debug.LogError("FirstRunTutorial could not find a TMP font asset.", this);
             return;
         }
+
+        canvas = GetComponentInParent<Canvas>();
+        canvasRect = canvas != null
+            ? canvas.transform as RectTransform
+            : null;
+        BuildSpotlight();
 
         messagePanel = new GameObject("TutorialMessage", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         RectTransform panelRect = messagePanel.GetComponent<RectTransform>();
@@ -684,7 +1147,68 @@ private void BuildUserInterface()
         ConfigureAutoSize(titleText, 30f, 50f);
         ConfigureAutoSize(bodyText, 26f, 46f);
         ConfigureAutoSize(progressText, 22f, 34f);
+
+        skipButton = CreateButton(
+            "Skip",
+            messagePanel.transform,
+            new Vector2(-20f, -18f),
+            new Vector2(170f, 52f),
+            CurrentLanguage == GameLanguage.Korean ? "건너뛰기" : "SKIP",
+            24f,
+            font);
+        RectTransform skipRect = skipButton.GetComponent<RectTransform>();
+        skipRect.anchorMin = Vector2.one;
+        skipRect.anchorMax = Vector2.one;
+        skipRect.pivot = Vector2.one;
+        skipButtonText = skipButton.GetComponentInChildren<TextMeshProUGUI>(true);
+        skipButton.onClick.AddListener(SkipTutorial);
+
+        BuildTouchGuide();
         messagePanel.SetActive(false);
+    }
+
+    private static Button CreateButton(
+        string objectName,
+        Transform parent,
+        Vector2 position,
+        Vector2 size,
+        string label,
+        float fontSize,
+        TMP_FontAsset textFont)
+    {
+        GameObject buttonObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image),
+            typeof(Button));
+        RectTransform rect = buttonObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+
+        Image image = buttonObject.GetComponent<Image>();
+        image.color = new Color(0.28f, 0.42f, 0.62f, 1f);
+        Button button = buttonObject.GetComponent<Button>();
+        button.targetGraphic = image;
+
+        TextMeshProUGUI text = CreateText(
+            "Label",
+            buttonObject.transform,
+            Vector2.zero,
+            size,
+            fontSize,
+            textFont);
+        RectTransform textRect = text.rectTransform;
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+        textRect.pivot = new Vector2(0.5f, 0.5f);
+        textRect.anchoredPosition = Vector2.zero;
+        text.raycastTarget = false;
+        text.SetText(label);
+        return button;
     }
 
     private static TextMeshProUGUI CreateText(string name, Transform parent, Vector2 position, Vector2 size, float fontSize, TMP_FontAsset textFont)
@@ -727,6 +1251,7 @@ private void BuildUserInterface()
             TutorialStep.JudgementIntroduction => 5,
             TutorialStep.PerfectJudgement => 6,
             TutorialStep.PerfectEnemyDefeat => 7,
+            TutorialStep.ProgressionIntroduction => 7,
             TutorialStep.CoinPickup => 7,
             _ => 0
         };
@@ -744,6 +1269,7 @@ private void BuildUserInterface()
         JudgementIntroduction,
         PerfectJudgement,
         PerfectEnemyDefeat,
+        ProgressionIntroduction,
         CoinPickup,
         Completed
     }

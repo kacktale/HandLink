@@ -44,10 +44,13 @@ public class Enemy : MonoBehaviour
             judgeDistance[index] = baseJudgeDistance[index] + upgradeValue;
         }
     }
-    // Update is called once per frame
-    void FixedUpdate()
+    private void FixedUpdate()
     {
-        if(!player.gameStarted) return;
+        if (!player.gameStarted)
+        {
+            return;
+        }
+
         transform.position += transform.right * Time.fixedDeltaTime * speed;
         float distance = Vector2.Distance(targetPos, transform.position);
         if (distance <= HitDistance)
@@ -63,7 +66,7 @@ public class Enemy : MonoBehaviour
         }
     }
 
-    public long Caculate(out Color judgementColor, out bool isPerfect)
+    public long Calculate(out Color judgementColor, out bool isPerfect)
     {
         judgementColor = Color.white;
         isPerfect = false;
@@ -82,7 +85,7 @@ public class Enemy : MonoBehaviour
                 return currentScore;
             }
         }
-        return currentScore;
+        return 0L;
     }
 
     public bool TryGetJudgementColor(float distance, float judgeDistanceBonus, out Color judgementColor)

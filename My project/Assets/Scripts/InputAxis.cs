@@ -134,19 +134,28 @@ public class InputAxis : MonoBehaviour
     public bool gameStarted = false;
 
     protected Vector3 pointerWorldPosition;
-    protected Vector2 distanseValue;
+    protected Vector2 distanceValue;
 
     private Camera inputCamera;
+    private bool wasGameplayPressed;
 
     public virtual void Update()
     {
         PointerInputSnapshot snapshot = PointerInputService.Read();
+        bool didBeginPress =
+            snapshot.IsGameplayPressed && !wasGameplayPressed;
+        wasGameplayPressed = snapshot.IsGameplayPressed;
         gameStarted = snapshot.IsGameplayPressed;
-        distanseValue = Vector2.zero;
+        distanceValue = Vector2.zero;
 
         if (!snapshot.IsGameplayPressed)
         {
             return;
+        }
+
+        if (didBeginPress)
+        {
+            GameAudio.Instance?.PlayMoveStart();
         }
 
         if (inputCamera == null)
@@ -173,6 +182,11 @@ public class InputAxis : MonoBehaviour
                 previousScreenPosition.x,
                 previousScreenPosition.y,
                 worldPlaneDistance));
-        distanseValue = previousWorldPosition - pointerWorldPosition;
+        distanceValue = previousWorldPosition - pointerWorldPosition;
+    }
+
+    protected void ResetPointerInputTracking()
+    {
+        wasGameplayPressed = false;
     }
 }

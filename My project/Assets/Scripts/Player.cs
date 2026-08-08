@@ -72,7 +72,7 @@ public class Player : InputAxis
         if (tutorialMovementLocked)
         {
             gameStarted = true;
-            distanseValue = Vector2.zero;
+            distanceValue = Vector2.zero;
             return;
         }
 
@@ -83,7 +83,7 @@ public class Player : InputAxis
             transform.position = pointerWorldPosition;
         }
 
-        if (!staminaController.Tick(distanseValue, gameStarted, Time.deltaTime))
+        if (!staminaController.Tick(distanceValue, gameStarted, Time.deltaTime))
         {
             return;
         }
@@ -111,6 +111,7 @@ public class Player : InputAxis
     {
         isGameOver = true;
         gameStarted = false;
+        ResetPointerInputTracking();
         playerVisual.SetGameplayVisible(false);
     }
 
@@ -119,6 +120,7 @@ public class Player : InputAxis
         isGameOver = false;
         isReadyToPlay = true;
         gameStarted = true;
+        ResetPointerInputTracking();
         scoreController.ResetScore();
         transform.position = basePosition;
         playerVisual.SetGameplayVisible(true);
@@ -132,7 +134,7 @@ public class Player : InputAxis
         tutorialMovementLocked = locked;
         if (locked)
         {
-            distanseValue = Vector2.zero;
+            distanceValue = Vector2.zero;
         }
     }
 
@@ -144,6 +146,7 @@ public class Player : InputAxis
     public void ApplyUpgradeStats()
     {
         upgradeApplier.Apply();
+        SpawnPivot.Instance?.RefreshJudgementDistances();
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
@@ -164,12 +167,20 @@ public class Player : InputAxis
         judge.transform.position = collision.transform.position;
 
         Enemy enemy = collision.gameObject.GetComponent<Enemy>();
-        long awardedScore =
-            enemy.Caculate(out Color judgementColor, out bool isPerfect);
+        long baseAwardedScore =
+            enemy.Calculate(out Color judgementColor, out bool isPerfect);
+        long awardedScore = SpawnPivot.Instance == null
+            ? baseAwardedScore
+            : SpawnPivot.Instance.ApplyScoreMultiplier(baseAwardedScore);
         scoreController.AddScore(awardedScore);
         
         GameAudio.Instance?.PlayHit(isPerfect);
-EnemyJudged?.Invoke(isPerfect);
+        if (isPerfect)
+        {
+            GameHaptics.PlayPerfect();
+        }
+
+        EnemyJudged?.Invoke(isPerfect);
         judge.color = judgementColor;
 
         if (isPerfect && !TryHandlePerfectCoinDrop(collision.transform.position))

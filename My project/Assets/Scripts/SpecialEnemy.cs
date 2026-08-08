@@ -42,12 +42,7 @@ public sealed class SpecialEnemy : MonoBehaviour
         }
 
         baseColor = spriteRenderer.color;
-        spriteRenderer.color = type switch
-        {
-            SpecialEnemyType.Pulse => Color.red,
-            SpecialEnemyType.HeartHealer => Color.green,
-            _ => baseColor
-        };
+        ApplyTypeColor();
 
         if (type == SpecialEnemyType.Pulse)
         {
@@ -62,16 +57,28 @@ public sealed class SpecialEnemy : MonoBehaviour
         previousPulseRadius = 0f;
         pulseDamageAvailable = false;
         warningSoundPlayed = false;
-        if (type == SpecialEnemyType.Pulse && spriteRenderer != null)
-        {
-            spriteRenderer.color = Color.red;
-        }
+        ApplyTypeColor();
         SetPulseVisible(false);
     }
 
     private void OnDisable()
     {
         SetPulseVisible(false);
+    }
+
+    private void ApplyTypeColor()
+    {
+        if (spriteRenderer == null)
+        {
+            return;
+        }
+
+        spriteRenderer.color = type switch
+        {
+            SpecialEnemyType.Pulse => Color.red,
+            SpecialEnemyType.HeartHealer => Color.green,
+            _ => baseColor
+        };
     }
 
     private void Update()
@@ -95,15 +102,25 @@ public sealed class SpecialEnemy : MonoBehaviour
         UpdatePulseVisual();
     }
 
-public bool TryHandleHeartArrival()
+    public bool TryHandleHeartArrival()
     {
-        if (type != SpecialEnemyType.HeartHealer || Player.Instance == null)
+        if (type == SpecialEnemyType.None || Player.Instance == null)
         {
             return false;
         }
 
-        Player.Instance.Heal(1);
-        GameAudio.Instance?.PlayHeal();
+        if (type == SpecialEnemyType.HeartHealer)
+        {
+            Player.Instance.Heal(1);
+            GameAudio.Instance?.PlayHeal();
+            SpawnPivot.Instance?.PlayEnemyDefeatEffect(transform.position, Color.green);
+        }
+        else if (type == SpecialEnemyType.Pulse)
+        {
+            GameAudio.Instance?.PlayPulseHeartArrival();
+            SpawnPivot.Instance?.PlayEnemyDefeatEffect(transform.position, Color.red);
+        }
+
         gameObject.SetActive(false);
         return true;
     }

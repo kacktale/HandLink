@@ -7,12 +7,13 @@ using UnityEngine.UI;
 public class GameOverFlow : MonoBehaviour
 {
     [SerializeField] private GameObject gameOverPanel;
-    [SerializeField] private GameObject mainPanel;
+    [SerializeField] private GameObject shopPanel;
     [SerializeField] private Image gameOverBackground;
     [SerializeField] private TextMeshProUGUI gameOverText;
     [SerializeField] private TextMeshProUGUI currentScoreText;
     [SerializeField] private TextMeshProUGUI maxScoreText;
-    [SerializeField] private Button startGameButton;
+    [SerializeField] private Button restartButton;
+    [SerializeField] private Button shopButton;
     [SerializeField] private float gameOverPresentationDuration = 1.2f;
 
     private Color backgroundColor;
@@ -29,7 +30,8 @@ public class GameOverFlow : MonoBehaviour
         textColor = gameOverText.color;
         currentScoreColor = currentScoreText.color;
         maxScoreColor = maxScoreText.color;
-        startGameButton.onClick.AddListener(StartGame);
+        restartButton.onClick.AddListener(RestartGame);
+        shopButton.onClick.AddListener(OpenShop);
     }
 
     private void Start()
@@ -46,7 +48,8 @@ public class GameOverFlow : MonoBehaviour
 
     private void OnDestroy()
     {
-        startGameButton.onClick.RemoveListener(StartGame);
+        restartButton.onClick.RemoveListener(RestartGame);
+        shopButton.onClick.RemoveListener(OpenShop);
         if (gameManager != null)
         {
             gameManager.StateChanged -= HandleStateChanged;
@@ -61,29 +64,31 @@ public class GameOverFlow : MonoBehaviour
         }
 
         IsShowingGameOver = true;
-
-        gameOverPanel.SetActive(true);
         SetScoreTexts();
-        SetAlpha(1f);
-        gameOverText.rectTransform.localScale = Vector3.one;
-        mainPanel.SetActive(false);
-        StartCoroutine(ShowGameOverThenMainPanel());
+        SetAlpha(0f);
+        gameOverText.rectTransform.localScale = Vector3.one * 0.78f;
+        restartButton.interactable = true;
+        shopButton.interactable = true;
+        StartCoroutine(ShowGameOverActions());
     }
 
-    private IEnumerator ShowGameOverThenMainPanel()
+    private IEnumerator ShowGameOverActions()
     {
         float elapsed = 0f;
         while (elapsed < gameOverPresentationDuration)
         {
             elapsed += Time.unscaledDeltaTime;
             float progress = Mathf.Clamp01(elapsed / gameOverPresentationDuration);
-            float alpha = Mathf.Sin(progress * Mathf.PI);
+            float alpha = Mathf.SmoothStep(0f, 1f, progress);
             SetAlpha(alpha);
-            gameOverText.rectTransform.localScale = Vector3.one * Mathf.Lerp(0.78f, 1.08f, Mathf.SmoothStep(0f, 1f, progress));
+            gameOverText.rectTransform.localScale = Vector3.one * Mathf.Lerp(0.78f, 1f, alpha);
             yield return null;
         }
 
-        gameManager?.ReturnToMainMenu();
+        SetAlpha(1f);
+        gameOverText.rectTransform.localScale = Vector3.one;
+        restartButton.interactable = true;
+        shopButton.interactable = true;
     }
 
     private void SetAlpha(float alpha)
@@ -121,15 +126,20 @@ public class GameOverFlow : MonoBehaviour
             return;
         }
 
-        foreach (ShopUpgradeButton upgradeButton in mainPanel.GetComponentsInChildren<ShopUpgradeButton>(true))
+        foreach (ShopUpgradeButton upgradeButton in shopPanel.GetComponentsInChildren<ShopUpgradeButton>(true))
         {
             upgradeButton.Refresh(Player.Instance);
         }
     }
 
-    private void StartGame()
+    private void RestartGame()
     {
-        gameManager?.StartGame();
+        gameManager?.RestartGame();
+    }
+
+    private void OpenShop()
+    {
+        gameManager?.OpenShop();
     }
 
     private void HandleStateChanged(GameState previousState, GameState nextState)
@@ -142,24 +152,29 @@ public class GameOverFlow : MonoBehaviour
         switch (state)
         {
             case GameState.MainMenu:
-            case GameState.Shop:
                 IsShowingGameOver = false;
-                gameOverPanel.SetActive(false);
-                mainPanel.SetActive(true);
-                startGameButton.interactable = true;
-                RefreshShop();
+                StopAllCoroutines();
+                restartButton.interactable = false;
+                shopButton.interactable = false;
                 break;
 
             case GameState.GameOver:
-                startGameButton.interactable = false;
                 Play();
+                break;
+
+            case GameState.Shop:
+                IsShowingGameOver = false;
+                StopAllCoroutines();
+                restartButton.interactable = false;
+                shopButton.interactable = false;
+                RefreshShop();
                 break;
 
             default:
                 IsShowingGameOver = false;
-                gameOverPanel.SetActive(false);
-                mainPanel.SetActive(false);
-                startGameButton.interactable = false;
+                StopAllCoroutines();
+                restartButton.interactable = false;
+                shopButton.interactable = false;
                 break;
         }
     }

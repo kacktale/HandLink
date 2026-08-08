@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 public enum GameLanguage
@@ -18,10 +19,15 @@ public sealed class InGameSettingsPanel : MonoBehaviour
     [SerializeField] private AudioSource soundSource;
 
     private readonly Dictionary<TextMeshProUGUI, string> originalTexts = new();
+    private readonly Dictionary<Button, GameObject> openButtonOwners = new();
+    private readonly Dictionary<Button, UnityAction> openButtonActions = new();
     private readonly Dictionary<string, string> koreanTexts = new()
     {
         { "MAIN", "메인" },
         { "START GAME", "게임 시작" },
+        { "SHOP", "상점" },
+        { "RESTART", "다시 시작" },
+        { "BACK", "뒤로" },
         { "JUDGEMENT UPGRADE", "판정 강화" },
         { "EXTRA LIFE", "추가 생명" },
         { "STAMINA UPGRADE", "스태미나 강화" },
@@ -33,17 +39,27 @@ public sealed class InGameSettingsPanel : MonoBehaviour
         { "SOUND", "사운드" },
         { "SOUND ON", "사운드: 켜짐" },
         { "SOUND OFF", "사운드: 꺼짐" },
+        { "VIBRATION", "진동" },
+        { "VIBRATION ON", "진동: 켜짐" },
+        { "VIBRATION OFF", "진동: 꺼짐" },
+        { "PLAY TUTORIAL", "튜토리얼 다시 보기" },
         { "CLOSE", "닫기" }
     };
 
     private GameObject mainPanel;
+    private GameObject gameOverPanel;
+    private GameObject shopPanel;
     private GameObject settingsPanel;
+    private GameObject returnPanel;
     private Button openButton;
     private Button closeButton;
     private Button koreanButton;
     private Button englishButton;
     private Button soundButton;
+    private Button vibrationButton;
+    private Button tutorialButton;
     private TextMeshProUGUI soundButtonText;
+    private TextMeshProUGUI vibrationButtonText;
 
     private GameLanguage CurrentLanguage => (GameLanguage)PlayerPrefs.GetInt(LanguagePreferenceKey, (int)GameLanguage.Korean);
     private bool IsSoundEnabled => PlayerPrefs.GetInt(SoundEnabledPreferenceKey, 1) == 1;
@@ -58,28 +74,38 @@ public sealed class InGameSettingsPanel : MonoBehaviour
         }
 
         CacheOriginalTexts();
-        openButton?.onClick.AddListener(Open);
+        RegisterOpenButtons();
         closeButton?.onClick.AddListener(Close);
         koreanButton?.onClick.AddListener(SetKorean);
         englishButton?.onClick.AddListener(SetEnglish);
         soundButton?.onClick.AddListener(ToggleSound);
+        vibrationButton?.onClick.AddListener(ToggleVibration);
+        tutorialButton?.onClick.AddListener(ReplayTutorial);
 
         ApplySettings();
     }
 
     private void OnDestroy()
     {
-        openButton?.onClick.RemoveListener(Open);
+        foreach (KeyValuePair<Button, UnityAction> entry in openButtonActions)
+        {
+            entry.Key?.onClick.RemoveListener(entry.Value);
+        }
+
+        openButtonActions.Clear();
         closeButton?.onClick.RemoveListener(Close);
         koreanButton?.onClick.RemoveListener(SetKorean);
         englishButton?.onClick.RemoveListener(SetEnglish);
         soundButton?.onClick.RemoveListener(ToggleSound);
+        vibrationButton?.onClick.RemoveListener(ToggleVibration);
+        tutorialButton?.onClick.RemoveListener(ReplayTutorial);
     }
 
-private void Open()
+private void Open(GameObject sourcePanel)
     {
         GameAudio.Instance?.PlayButton();
-        mainPanel?.SetActive(false);
+        returnPanel = sourcePanel;
+        returnPanel?.SetActive(false);
         settingsPanel?.SetActive(true);
     }
 
@@ -87,7 +113,8 @@ private void Close()
     {
         GameAudio.Instance?.PlayButton();
         settingsPanel?.SetActive(false);
-        mainPanel?.SetActive(true);
+        (returnPanel != null ? returnPanel : mainPanel)?.SetActive(true);
+        returnPanel = null;
     }
 
     private void SetLanguage(GameLanguage language)
@@ -115,6 +142,29 @@ private void ToggleSound()
         ApplySoundState();
     }
 
+    private void ToggleVibration()
+    {
+        GameAudio.Instance?.PlayButton();
+        GameHaptics.SetEnabled(!GameHaptics.IsEnabled);
+        ApplyVibrationState();
+    }
+
+    private void ReplayTutorial()
+    {
+        GameAudio.Instance?.PlayButton();
+        settingsPanel?.SetActive(false);
+        mainPanel?.SetActive(true);
+
+        FirstRunTutorial tutorial = GetComponent<FirstRunTutorial>();
+        if (tutorial != null && tutorial.ReplayTutorial())
+        {
+            return;
+        }
+
+        mainPanel?.SetActive(false);
+        settingsPanel?.SetActive(true);
+    }
+
     private void ApplySettings()
     {
         foreach (KeyValuePair<TextMeshProUGUI, string> entry in originalTexts)
@@ -130,6 +180,23 @@ private void ToggleSound()
         }
 
         ApplySoundState();
+        ApplyVibrationState();
+    }
+
+    private void ApplyVibrationState()
+    {
+        if (vibrationButtonText == null)
+        {
+            return;
+        }
+
+        string state = GameHaptics.IsEnabled
+            ? "VIBRATION ON"
+            : "VIBRATION OFF";
+        vibrationButtonText.SetText(
+            CurrentLanguage == GameLanguage.Korean
+                ? koreanTexts[state]
+                : state);
     }
 
     public void RefreshSettings()
@@ -197,6 +264,9 @@ private void ApplySoundState()
             return;
         }
 
+        gameOverPanel = transform.Find("GameOverPanel")?.gameObject;
+        shopPanel = transform.Find("ShopPanel")?.gameObject;
+
         TMP_FontAsset font = GetComponentInChildren<TextMeshProUGUI>(true)?.font ?? TMP_Settings.defaultFontAsset;
         if (font == null)
         {
@@ -204,21 +274,29 @@ private void ApplySoundState()
             return;
         }
 
-        openButton = CreateButton(
-            "SettingsButton",
-            mainPanel.transform,
-            new Vector2(-30f, -30f),
-            new Vector2(200f, 200f),
-            "SETTINGS",
-            new Color(0.13f, 0.29f, 0.52f, 1f),
-            font);
-        RectTransform openButtonRect = openButton.GetComponent<RectTransform>();
-        openButtonRect.anchorMin = Vector2.one;
-        openButtonRect.anchorMax = Vector2.one;
-        openButtonRect.pivot = Vector2.one;
-        TextMeshProUGUI openButtonText = openButton.GetComponentInChildren<TextMeshProUGUI>(true);
-        openButtonText.fontSize = 32f;
-        openButtonText.enableWordWrapping = false;
+        openButton = FindButton(mainPanel.transform, "SettingsButton");
+        if (openButton == null)
+        {
+            openButton = CreateButton(
+                "SettingsButton",
+                mainPanel.transform,
+                new Vector2(-70f, -172f),
+                new Vector2(180f, 180f),
+                "SETTINGS",
+                new Color(0.13f, 0.29f, 0.52f, 1f),
+                font);
+            RectTransform openButtonRect = openButton.GetComponent<RectTransform>();
+            openButtonRect.anchorMin = Vector2.one;
+            openButtonRect.anchorMax = Vector2.one;
+            openButtonRect.pivot = Vector2.one;
+            TextMeshProUGUI openButtonText = openButton.GetComponentInChildren<TextMeshProUGUI>(true);
+            openButtonText.fontSize = 32f;
+            openButtonText.enableWordWrapping = false;
+        }
+
+        AddOpenButtonOwner(openButton, mainPanel);
+        AddOpenButtonOwner(CloneOpenButton(gameOverPanel), gameOverPanel);
+        AddOpenButtonOwner(CloneOpenButton(shopPanel), shopPanel);
 
         settingsPanel = CreatePanel(
             "SettingsPanel",
@@ -231,11 +309,53 @@ private void ApplySoundState()
         CreateText("LanguageLabel", settingsPanel.transform, new Vector2(0f, 280f), new Vector2(700f, 80f), "LANGUAGE", 42f, font);
         koreanButton = CreateButton("KoreanButton", settingsPanel.transform, new Vector2(-205f, 145f), new Vector2(360f, 120f), "KOREAN", new Color(0.13f, 0.29f, 0.52f, 1f), font);
         englishButton = CreateButton("EnglishButton", settingsPanel.transform, new Vector2(205f, 145f), new Vector2(360f, 120f), "ENGLISH", new Color(0.13f, 0.29f, 0.52f, 1f), font);
-        CreateText("SoundLabel", settingsPanel.transform, new Vector2(0f, -70f), new Vector2(700f, 80f), "SOUND", 42f, font);
-        soundButton = CreateButton("SoundButton", settingsPanel.transform, new Vector2(0f, -205f), new Vector2(720f, 120f), "SOUND ON", new Color(0.13f, 0.29f, 0.52f, 1f), font);
-        closeButton = CreateButton("CloseButton", settingsPanel.transform, new Vector2(0f, -505f), new Vector2(720f, 130f), "CLOSE", new Color(0.33f, 0.16f, 0.29f, 1f), font);
+        tutorialButton = CreateButton("TutorialButton", settingsPanel.transform, new Vector2(0f, -10f), new Vector2(720f, 90f), "PLAY TUTORIAL", new Color(0.2f, 0.4f, 0.38f, 1f), font);
+        CreateText("SoundLabel", settingsPanel.transform, new Vector2(0f, -110f), new Vector2(700f, 70f), "SOUND", 38f, font);
+        soundButton = CreateButton("SoundButton", settingsPanel.transform, new Vector2(0f, -205f), new Vector2(720f, 90f), "SOUND ON", new Color(0.13f, 0.29f, 0.52f, 1f), font);
+        CreateText("VibrationLabel", settingsPanel.transform, new Vector2(0f, -330f), new Vector2(700f, 70f), "VIBRATION", 38f, font);
+        vibrationButton = CreateButton("VibrationButton", settingsPanel.transform, new Vector2(0f, -425f), new Vector2(720f, 90f), "VIBRATION ON", new Color(0.13f, 0.29f, 0.52f, 1f), font);
+        closeButton = CreateButton("CloseButton", settingsPanel.transform, new Vector2(0f, -570f), new Vector2(720f, 120f), "CLOSE", new Color(0.33f, 0.16f, 0.29f, 1f), font);
         soundButtonText = soundButton.GetComponentInChildren<TextMeshProUGUI>(true);
+        vibrationButtonText = vibrationButton.GetComponentInChildren<TextMeshProUGUI>(true);
         settingsPanel.SetActive(false);
+    }
+
+    private Button CloneOpenButton(GameObject ownerPanel)
+    {
+        if (ownerPanel == null || openButton == null)
+        {
+            return null;
+        }
+
+        Button existingButton = FindButton(ownerPanel.transform, "SettingsButton");
+        if (existingButton != null)
+        {
+            return existingButton;
+        }
+
+        Button clonedButton = Instantiate(openButton, ownerPanel.transform, false);
+        clonedButton.name = "SettingsButton";
+        return clonedButton;
+    }
+
+    private void AddOpenButtonOwner(Button button, GameObject ownerPanel)
+    {
+        if (button != null && ownerPanel != null)
+        {
+            openButtonOwners[button] = ownerPanel;
+        }
+    }
+
+    private void RegisterOpenButtons()
+    {
+        foreach (KeyValuePair<Button, GameObject> entry in openButtonOwners)
+        {
+            Button button = entry.Key;
+            GameObject ownerPanel = entry.Value;
+            UnityAction action = () => Open(ownerPanel);
+            openButtonActions.Add(button, action);
+            button.onClick.AddListener(action);
+        }
     }
 
     private static GameObject CreatePanel(string name, Transform parent, Vector2 position, Vector2 size, Color color)
@@ -273,6 +393,20 @@ private void ApplySoundState()
         labelText.alignment = TextAlignmentOptions.Center;
         labelText.SetText(label);
         return button;
+    }
+
+    private static Button FindButton(Transform root, string buttonName)
+    {
+        Button[] buttons = root.GetComponentsInChildren<Button>(true);
+        for (int index = 0; index < buttons.Length; index++)
+        {
+            if (buttons[index].name == buttonName)
+            {
+                return buttons[index];
+            }
+        }
+
+        return null;
     }
 
     private static void CreateText(string name, Transform parent, Vector2 position, Vector2 size, string value, float fontSize, TMP_FontAsset font)

@@ -1,9 +1,11 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 public class UIAnimate : InputAxis
 {
-    public Image pausePannel;
+    [FormerlySerializedAs("pausePannel")]
+    public Image pausePanel;
     public RectTransform pauseUpUI;
     public RectTransform pauseDownUI;
     public RectTransform IngameUiPos;
@@ -19,6 +21,7 @@ public class UIAnimate : InputAxis
     private bool isReadyToPlay = false;
     private bool isTutorialMode;
     private bool wasScreenHeld;
+    private bool isReleaseTimeoutRunning;
     private float releaseElapsedTime;
     private Player player;
     private GameManager gameManager;
@@ -44,8 +47,7 @@ public class UIAnimate : InputAxis
         }
     }
 
-    // Update is called once per frame
-public override void Update()
+    public override void Update()
     {
         if (!isReadyToPlay)
         {
@@ -69,13 +71,13 @@ public override void Update()
 
         if (animateDone)
         {
-            IngameUiPos.anchoredPosition -= distanseValue * 2f;
+            IngameUiPos.anchoredPosition -= distanceValue * 2f;
         }
 
         if (gameStarted && !animateDone)
         {
-            float alpha = Mathf.Lerp(pausePannel.color.a, 0, Time.deltaTime / 0.1f);
-            pausePannel.color = new Color(pausePannel.color.r, pausePannel.color.g, pausePannel.color.b, alpha);
+            float alpha = Mathf.Lerp(pausePanel.color.a, 0, Time.deltaTime / 0.1f);
+            pausePanel.color = new Color(pausePanel.color.r, pausePanel.color.g, pausePanel.color.b, alpha);
 
             pauseUpUI.anchoredPosition = Vector3.Lerp(pauseUpUI.anchoredPosition, pos[3], Time.deltaTime / 0.1f);
             pauseDownUI.anchoredPosition = Vector3.Lerp(pauseDownUI.anchoredPosition, pos[4], Time.deltaTime / 0.1f);
@@ -84,8 +86,8 @@ public override void Update()
         }
         else if (!gameStarted)
         {
-            float alpha = Mathf.Lerp(pausePannel.color.a, 0.8f, Time.deltaTime / 0.1f);
-            pausePannel.color = new Color(pausePannel.color.r, pausePannel.color.g, pausePannel.color.b, alpha);
+            float alpha = Mathf.Lerp(pausePanel.color.a, 0.8f, Time.deltaTime / 0.1f);
+            pausePanel.color = new Color(pausePanel.color.r, pausePanel.color.g, pausePanel.color.b, alpha);
 
             pauseUpUI.anchoredPosition = Vector3.Lerp(pauseUpUI.anchoredPosition, pos[0], Time.deltaTime / 0.1f);
             pauseDownUI.anchoredPosition = Vector3.Lerp(pauseDownUI.anchoredPosition, pos[1], Time.deltaTime / 0.1f);
@@ -113,7 +115,7 @@ public override void Update()
     {
         ResetReleaseTimeout();
         releaseCountdownRoot.SetActive(false);
-        pausePannel.gameObject.SetActive(false);
+        pausePanel.gameObject.SetActive(false);
         enabled = false;
     }
 
@@ -123,7 +125,7 @@ public override void Update()
         gameStarted = false;
         ResetReleaseTimeout();
         releaseCountdownRoot.SetActive(false);
-        pausePannel.gameObject.SetActive(false);
+        pausePanel.gameObject.SetActive(false);
         enabled = false;
     }
 
@@ -145,7 +147,7 @@ public override void Update()
         gameStarted = true;
         ResetReleaseTimeout();
         releaseCountdownRoot.SetActive(!isTutorialMode);
-        pausePannel.gameObject.SetActive(!isTutorialMode);
+        pausePanel.gameObject.SetActive(!isTutorialMode);
     }
 
     public void SetTutorialMode(bool enabledForTutorial)
@@ -156,14 +158,14 @@ public override void Update()
         if (enabledForTutorial)
         {
             releaseCountdownRoot.SetActive(false);
-            pausePannel.gameObject.SetActive(false);
+            pausePanel.gameObject.SetActive(false);
             return;
         }
 
         if (isReadyToPlay && GameManager.Instance != null && GameManager.Instance.IsGameplayActive)
         {
             releaseCountdownRoot.SetActive(true);
-            pausePannel.gameObject.SetActive(true);
+            pausePanel.gameObject.SetActive(true);
         }
     }
 
@@ -176,18 +178,31 @@ public override void Update()
             return;
         }
 
-        if (gameStarted)
+        if (!wasScreenHeld)
         {
-            releaseElapsedTime = 0f;
-            wasScreenHeld = true;
-            releaseCountdownRoot.SetActive(false);
-            SetReleaseCountdownProgress(1f);
+            if (gameStarted)
+            {
+                wasScreenHeld = true;
+                releaseCountdownRoot.SetActive(false);
+                SetReleaseCountdownProgress(1f);
+            }
+
             return;
         }
 
-        if (!wasScreenHeld)
+        if (!isReleaseTimeoutRunning)
         {
-            releaseCountdownRoot.SetActive(false);
+            if (gameStarted)
+            {
+                return;
+            }
+
+            isReleaseTimeoutRunning = true;
+        }
+
+        if (gameStarted)
+        {
+            releaseCountdownRoot.SetActive(true);
             return;
         }
 
@@ -206,6 +221,7 @@ public override void Update()
     {
         releaseElapsedTime = 0f;
         wasScreenHeld = false;
+        isReleaseTimeoutRunning = false;
         if (releaseCountdownFill != null)
         {
             SetReleaseCountdownProgress(1f);

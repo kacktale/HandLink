@@ -1,21 +1,25 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [DisallowMultipleComponent]
 public sealed class SpawnPivot : MonoBehaviour
 {
     private const int InitialNormalPoolSize = 80;
     private const int InitialJudgementPoolSize = 80;
-    private const float MinimumSpawnInterval = 0.3f;
+    private const float MinimumSpawnInterval = 0.35f;
 
     public static SpawnPivot Instance { get; private set; }
 
     [SerializeField] private Transform[] enemySummonPos;
-    [SerializeField] private GameObject[] enemys;
+    [FormerlySerializedAs("enemys")]
+    [SerializeField] private GameObject[] enemies;
     [SerializeField] private GameObject judgeObj;
     [SerializeField] private GameObject target;
+    [SerializeField] private DifficultyConfig difficultyConfig;
     [SerializeField] private float spawnDelay;
     [SerializeField, Min(0.01f)] private float enemyTravelDuration = 1.2f;
-    [SerializeField] private Transform poolParant;
+    [FormerlySerializedAs("poolParant")]
+    [SerializeField] private Transform poolParent;
     [Header("Special Enemies")]
     [SerializeField, Range(0f, 1f)] private float pulseEnemyChance = 0.15f;
     [SerializeField, Min(1)] private int pulsePoolSize = 20;
@@ -27,6 +31,8 @@ public sealed class SpawnPivot : MonoBehaviour
     private EnemyPool enemyPool;
     private JudgementPool judgementPool;
     private DifficultyController difficultyController;
+    private GameplayAspectController aspectController;
+    private EnemyDefeatEffects enemyDefeatEffects;
     private bool isTutorialMode;
 
     public Vector2 TutorialTargetPosition =>
@@ -98,13 +104,43 @@ public sealed class SpawnPivot : MonoBehaviour
             travelDuration);
     }
 
+    public GameObject SpawnTutorialSpecialEnemy(
+        SpecialEnemyType type,
+        Vector2 position,
+        Vector2 targetPosition,
+        float travelDuration)
+    {
+        return enemySpawner.SpawnTutorialSpecialEnemy(
+            type,
+            position,
+            targetPosition,
+            travelDuration);
+    }
+
     public void ResetGame()
     {
         enemySpawner.ResetSpawner();
         difficultyController.ResetDifficulty();
         enemyPool.ReturnAll();
-        enemyPool.RefreshJudgementDistances();
+        RefreshJudgementDistances();
         judgementPool.ReturnAll();
+    }
+
+    public void RefreshJudgementDistances()
+    {
+        enemyPool?.RefreshJudgementDistances();
+    }
+
+    public void PlayEnemyDefeatEffect(Vector3 position, Color color)
+    {
+        enemyDefeatEffects?.Play(position, color);
+    }
+
+    public long ApplyScoreMultiplier(long score)
+    {
+        return difficultyController == null
+            ? score
+            : difficultyController.ApplyScoreMultiplier(score);
     }
 
     public bool TryGetHeartDistanceJudgementColor(
@@ -133,33 +169,38 @@ public sealed class SpawnPivot : MonoBehaviour
         enemyPool = GetOrAdd<EnemyPool>();
         judgementPool = GetOrAdd<JudgementPool>();
         difficultyController = GetOrAdd<DifficultyController>();
+        aspectController = GetOrAdd<GameplayAspectController>();
+        enemyDefeatEffects = GetOrAdd<EnemyDefeatEffects>();
     }
 
     private void ConfigureComponents()
     {
         difficultyController.Configure(
+            difficultyConfig,
             spawnDelay,
             MinimumSpawnInterval,
-            enemyTravelDuration);
+            enemyTravelDuration,
+            pulseEnemyChance,
+            healingSpawnInterval);
         enemyPool.Initialize(
-            enemys,
-            poolParant,
+            enemies,
+            poolParent,
             transform.position,
             InitialNormalPoolSize,
             pulsePoolSize,
             healingPoolSize);
         judgementPool.Initialize(
             judgeObj,
-            poolParant,
+            poolParent,
             transform.position,
             InitialJudgementPoolSize);
+        aspectController.Configure(Camera.main, target != null ? target.transform : transform);
         enemySpawner.Configure(
             enemySummonPos,
             target != null ? target.transform : transform,
             enemyPool,
             difficultyController,
-            pulseEnemyChance,
-            healingSpawnInterval);
+            aspectController);
     }
 
     private T GetOrAdd<T>() where T : Component
