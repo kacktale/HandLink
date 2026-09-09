@@ -5,7 +5,6 @@ public sealed class DamageVignette : MaskableGraphic
 {
     private const int GridSize = 5;
     private float intensity;
-
     public void SetIntensity(float value)
     {
         value = Mathf.Clamp01(value);

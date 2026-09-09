@@ -113,7 +113,7 @@ public sealed class SpecialEnemy : MonoBehaviour
         {
             Player.Instance.Heal(1);
             GameAudio.Instance?.PlayHeal();
-            SpawnPivot.Instance?.PlayEnemyDefeatEffect(transform.position, Color.green);
+            PlayDefeatFeedback();
         }
         else if (type == SpecialEnemyType.Pulse)
         {
@@ -125,16 +125,6 @@ public sealed class SpecialEnemy : MonoBehaviour
         return true;
     }
 
-    public bool TryHandlePlayerContact()
-    {
-        if (type != SpecialEnemyType.HeartHealer)
-        {
-            return false;
-        }
-
-        gameObject.SetActive(false);
-        return true;
-    }
     private void EmitPulse()
     {
         GameAudio.Instance?.PlayPulseBurst();
@@ -144,6 +134,14 @@ public sealed class SpecialEnemy : MonoBehaviour
         previousPulseRadius = 0f;
         pulseDamageAvailable = true;
         SetPulseVisible(true);
+    }
+
+    public void PlayDefeatFeedback()
+    {
+        if (type == SpecialEnemyType.HeartHealer)
+        {
+            SpawnPivot.Instance?.PlayEnemyDefeatEffect(transform.position, new Color(0.2f, 1f, 0.45f));
+        }
     }
 
     private void UpdatePulseVisual()
@@ -182,8 +180,9 @@ public sealed class SpecialEnemy : MonoBehaviour
         float playerDistance = Vector2.Distance(
             transform.position,
             Player.Instance.transform.position);
-        if (playerDistance < previousPulseRadius - PulseHitThickness ||
-            playerDistance > currentRadius + PulseHitThickness)
+        float hitThickness = PulseHitThickness * Player.Instance.PulseHitboxScale;
+        if (playerDistance < previousPulseRadius - hitThickness ||
+            playerDistance > currentRadius + hitThickness)
         {
             return;
         }

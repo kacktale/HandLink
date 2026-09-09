@@ -2,10 +2,10 @@ using UnityEngine;
 
 public enum UpgradeType
 {
-    Judgement,
-    ExtraLife,
-    Stamina,
-    CircleSize
+    Judgement = 0,
+    ExtraLife = 1,
+    Score = 2, // Keep the former stamina upgrade's saved slot.
+    CircleSize = 3
 }
 
 [CreateAssetMenu(fileName = "UpgradeDefinition", menuName = "HandLink/Upgrade Definition")]

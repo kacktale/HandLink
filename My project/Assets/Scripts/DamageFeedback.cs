@@ -2,6 +2,8 @@ using UnityEngine;
 
 public sealed class DamageFeedback : MonoBehaviour
 {
+    private static readonly Color HealingVignetteColor = new Color(0.12f, 1f, 0.38f, 1f);
+
     [SerializeField] private Camera targetCamera;
     [SerializeField] private DamageVignette vignette;
     [SerializeField, Min(0.01f)] private float duration = 0.22f;
@@ -10,6 +12,8 @@ public sealed class DamageFeedback : MonoBehaviour
 
     private Vector3 baseCameraPosition;
     private float remainingTime;
+    private Color damageVignetteColor;
+    private bool shakeCamera;
 
     private void Awake()
     {
@@ -23,7 +27,11 @@ public sealed class DamageFeedback : MonoBehaviour
             baseCameraPosition = targetCamera.transform.localPosition;
         }
 
-        vignette?.SetIntensity(0f);
+        if (vignette != null)
+        {
+            damageVignetteColor = vignette.color;
+            vignette.SetIntensity(0f);
+        }
     }
 
     private void OnDisable()
@@ -33,11 +41,28 @@ public sealed class DamageFeedback : MonoBehaviour
 
     public void Play()
     {
+        StartFeedback(damageVignetteColor, withCameraShake: true);
+    }
+
+    public void PlayHeal()
+    {
+        StartFeedback(HealingVignetteColor, withCameraShake: false);
+    }
+
+    private void StartFeedback(Color color, bool withCameraShake)
+    {
+        ResetFeedback();
         if (targetCamera != null)
         {
             baseCameraPosition = targetCamera.transform.localPosition;
         }
 
+        if (vignette != null)
+        {
+            vignette.color = color;
+        }
+
+        shakeCamera = withCameraShake;
         remainingTime = duration;
     }
 
@@ -52,7 +77,7 @@ public sealed class DamageFeedback : MonoBehaviour
         float normalizedTime = remainingTime / duration;
         float strength = Mathf.Sin(normalizedTime * Mathf.PI);
 
-        if (targetCamera != null)
+        if (shakeCamera && targetCamera != null)
         {
             Vector2 offset = Random.insideUnitCircle * (shakeMagnitude * strength);
             targetCamera.transform.localPosition = baseCameraPosition + new Vector3(offset.x, offset.y, 0f);
@@ -74,5 +99,10 @@ public sealed class DamageFeedback : MonoBehaviour
         }
 
         vignette?.SetIntensity(0f);
+        if (vignette != null)
+        {
+            vignette.color = damageVignetteColor;
+        }
+        shakeCamera = false;
     }
 }

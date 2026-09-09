@@ -13,6 +13,7 @@ public sealed class PlayerHealth : MonoBehaviour
 
     public event Action<int, int> HealthChanged;
     public event Action Damaged;
+    public event Action Healed;
     public event Action Died;
 
     private void Awake()
@@ -30,14 +31,14 @@ public sealed class PlayerHealth : MonoBehaviour
         HealthChanged?.Invoke(CurrentHealth, MaxHealth);
     }
 
-    public bool TakeDamage()
+    public bool TakeDamage(bool preventDeath = false)
     {
         if (IsDead)
         {
             return false;
         }
 
-        CurrentHealth--;
+        CurrentHealth = Mathf.Max(preventDeath ? 1 : 0, CurrentHealth - 1);
         Damaged?.Invoke();
         HealthChanged?.Invoke(CurrentHealth, MaxHealth);
 
@@ -58,12 +59,19 @@ public sealed class PlayerHealth : MonoBehaviour
 
         CurrentHealth = Mathf.Min(MaxHealth, CurrentHealth + amount);
         HealthChanged?.Invoke(CurrentHealth, MaxHealth);
+        Healed?.Invoke();
         return true;
     }
 
     public void ResetHealth()
     {
         CurrentHealth = MaxHealth;
+        HealthChanged?.Invoke(CurrentHealth, MaxHealth);
+    }
+
+    public void PrepareHealingPractice()
+    {
+        CurrentHealth = Mathf.Max(1, MaxHealth - 1);
         HealthChanged?.Invoke(CurrentHealth, MaxHealth);
     }
 }

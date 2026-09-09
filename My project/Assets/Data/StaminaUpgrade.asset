@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4a8e041e00a442f1977eb129a10f28b5, type: 3}
-  m_Name: StaminaUpgrade
+  m_Name: ScoreUpgrade
   m_EditorClassIdentifier: 
-  value: [10, 10, 15, 15, 20]
+  value: [0.1, 0.1, 0.1, 0.1, 0.1]
   cost: [10, 25, 50, 100, 200]

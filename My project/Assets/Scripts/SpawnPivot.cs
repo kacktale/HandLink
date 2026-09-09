@@ -154,12 +154,8 @@ public sealed class SpawnPivot : MonoBehaviour
             return false;
         }
 
-        float upgradeValue = player == null
-            ? 0f
-            : player.GetUpgradeValue(UpgradeType.Judgement);
         return judgementSettings.TryGetJudgementColor(
             distance,
-            upgradeValue,
             out judgementColor);
     }
 

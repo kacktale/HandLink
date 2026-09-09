@@ -4,6 +4,8 @@ using UnityEngine.UI;
 
 public class UIAnimate : InputAxis
 {
+    private const float HiddenTopPadding = 256f;
+
     [FormerlySerializedAs("pausePannel")]
     public Image pausePanel;
     public RectTransform pauseUpUI;
@@ -32,6 +34,7 @@ public class UIAnimate : InputAxis
     {
         player = Player.Instance;
         gameManager = GameManager.Instance;
+        RefreshHiddenTopTargets();
         if (gameManager != null)
         {
             gameManager.StateChanged += HandleStateChanged;
@@ -142,6 +145,7 @@ public class UIAnimate : InputAxis
             }
         }
 
+        RefreshHiddenTopTargets();
         enabled = true;
         isReadyToPlay = true;
         gameStarted = true;
@@ -226,6 +230,56 @@ public class UIAnimate : InputAxis
         {
             SetReleaseCountdownProgress(1f);
         }
+    }
+
+    private void RefreshHiddenTopTargets()
+    {
+        if (pos == null || pos.Length < 4)
+        {
+            return;
+        }
+
+        pos[2] = CalculateHiddenTopTarget(IngameUiPos, pos[2]);
+        pos[3] = CalculateHiddenTopTarget(pauseUpUI, pos[3]);
+    }
+
+    private static Vector3 CalculateHiddenTopTarget(
+        RectTransform root,
+        Vector3 currentTarget)
+    {
+        if (root == null)
+        {
+            return currentTarget;
+        }
+
+        RectTransform[] contents =
+            root.GetComponentsInChildren<RectTransform>(true);
+        float lowestContentEdge = float.PositiveInfinity;
+
+        for (int index = 0; index < contents.Length; index++)
+        {
+            RectTransform content = contents[index];
+            if (content == root)
+            {
+                continue;
+            }
+
+            Bounds bounds =
+                RectTransformUtility.CalculateRelativeRectTransformBounds(
+                    root,
+                    content);
+            lowestContentEdge = Mathf.Min(lowestContentEdge, bounds.min.y);
+        }
+
+        if (float.IsPositiveInfinity(lowestContentEdge))
+        {
+            return currentTarget;
+        }
+
+        float requiredOffset =
+            root.rect.yMax - lowestContentEdge + HiddenTopPadding;
+        currentTarget.y = Mathf.Max(currentTarget.y, requiredOffset);
+        return currentTarget;
     }
 
     private void SetReleaseCountdownProgress(float progress)

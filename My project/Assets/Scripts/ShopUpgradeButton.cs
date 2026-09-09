@@ -180,9 +180,9 @@ public class ShopUpgradeButton : MonoBehaviour
             UpgradeType.ExtraLife => korean
                 ? "\uCD94\uAC00 \uC0DD\uBA85"
                 : "EXTRA LIFE",
-            UpgradeType.Stamina => korean
-                ? "\uCD5C\uB300 \uC2A4\uD0DC\uBBF8\uB098"
-                : "MAX STAMINA",
+            UpgradeType.Score => korean
+                ? "점수 배율"
+                : "SCORE MULTIPLIER",
             UpgradeType.CircleSize => korean
                 ? "\uC6D0 \uD06C\uAE30"
                 : "CIRCLE SIZE",
@@ -202,7 +202,7 @@ public class ShopUpgradeButton : MonoBehaviour
         return upgradeType switch
         {
             UpgradeType.ExtraLife => $"+{Mathf.RoundToInt(value)}",
-            UpgradeType.Stamina => $"+{value:0.#}",
+            UpgradeType.Score => $"x{1f + Mathf.Clamp(value, 0f, 0.5f):0.00}",
             UpgradeType.Judgement => $"+{value:0.##}",
             UpgradeType.CircleSize => $"+{value:0.##}",
             _ => $"+{value:0.##}"

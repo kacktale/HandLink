@@ -27,7 +27,7 @@ public sealed class PlayerStamina : MonoBehaviour
     {
         if (!IsStunned)
         {
-            SetCurrent(CurrentStamina - Mathf.Abs(distanceDelta.x + distanceDelta.y) * 0.5f);
+            SetCurrent(CurrentStamina - distanceDelta.magnitude * 0.5f);
             if (CurrentStamina <= 0f)
             {
                 recoveryTime = 0f;

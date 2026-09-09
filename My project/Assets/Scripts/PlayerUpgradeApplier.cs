@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(PlayerProgression))]
@@ -8,13 +9,15 @@ public sealed class PlayerUpgradeApplier : MonoBehaviour
 {
     [SerializeField] private UpgradeDefinition judgementUpgrade;
     [SerializeField] private UpgradeDefinition extraLifeUpgrade;
-    [SerializeField] private UpgradeDefinition staminaUpgrade;
+    [FormerlySerializedAs("staminaUpgrade")]
+    [SerializeField] private UpgradeDefinition scoreUpgrade;
     [SerializeField] private UpgradeDefinition circleSizeUpgrade;
 
     private PlayerProgression progression;
     private PlayerHealth health;
     private PlayerStamina stamina;
     private Vector3 baseScale;
+    public float PulseHitboxScale { get; private set; } = 1f;
 
     private void Awake()
     {
@@ -42,10 +45,11 @@ public sealed class PlayerUpgradeApplier : MonoBehaviour
         int maxHealth = health.BaseHealth +
                         Mathf.RoundToInt(GetUpgradeValue(UpgradeType.ExtraLife));
         health.SetMaxHealth(maxHealth, refill: true);
-        stamina.SetMaxStamina(
-            stamina.BaseMaxStamina + GetUpgradeValue(UpgradeType.Stamina));
+        stamina.SetMaxStamina(stamina.BaseMaxStamina);
         transform.localScale =
             baseScale + Vector3.one * GetUpgradeValue(UpgradeType.CircleSize);
+        PulseHitboxScale = Mathf.Clamp01(
+            Mathf.Abs(baseScale.x) / Mathf.Max(0.01f, Mathf.Abs(transform.localScale.x)));
     }
 
     private UpgradeDefinition GetUpgradeDefinition(UpgradeType type)
@@ -54,7 +58,7 @@ public sealed class PlayerUpgradeApplier : MonoBehaviour
         {
             UpgradeType.Judgement => judgementUpgrade,
             UpgradeType.ExtraLife => extraLifeUpgrade,
-            UpgradeType.Stamina => staminaUpgrade,
+            UpgradeType.Score => scoreUpgrade,
             UpgradeType.CircleSize => circleSizeUpgrade,
             _ => null
         };

@@ -88,13 +88,13 @@ public class Enemy : MonoBehaviour
         return 0L;
     }
 
-    public bool TryGetJudgementColor(float distance, float judgeDistanceBonus, out Color judgementColor)
+    public bool TryGetJudgementColor(float distance, out Color judgementColor)
     {
         judgementColor = Color.white;
 
         for (int index = 0; index < judgeDistance.Length; index++)
         {
-            if (distance <= judgeDistance[index] + judgeDistanceBonus)
+            if (distance <= judgeDistance[index])
             {
                 judgementColor = judgeColor[index];
                 return true;

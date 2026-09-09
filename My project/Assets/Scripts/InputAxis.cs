@@ -133,6 +133,9 @@ public class InputAxis : MonoBehaviour
 {
     public bool gameStarted = false;
 
+    [SerializeField, Min(0.1f)]
+    private float horizontalInputSpeedMultiplier = 1f;
+
     protected Vector3 pointerWorldPosition;
     protected Vector2 distanceValue;
 
@@ -183,6 +186,15 @@ public class InputAxis : MonoBehaviour
                 previousScreenPosition.y,
                 worldPlaneDistance));
         distanceValue = previousWorldPosition - pointerWorldPosition;
+
+        // Portrait displays expose a much narrower world width than height.
+        // Compensate only the constrained axis so an identical physical drag
+        // has comparable in-game movement in both directions.
+        float horizontalAspectCompensation = Mathf.Max(
+            1f,
+            1f / Mathf.Max(0.1f, inputCamera.aspect));
+        distanceValue.x *= horizontalAspectCompensation *
+            horizontalInputSpeedMultiplier;
     }
 
     protected void ResetPointerInputTracking()

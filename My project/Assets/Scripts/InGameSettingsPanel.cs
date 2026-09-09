@@ -30,7 +30,8 @@ public sealed class InGameSettingsPanel : MonoBehaviour
         { "BACK", "뒤로" },
         { "JUDGEMENT UPGRADE", "판정 강화" },
         { "EXTRA LIFE", "추가 생명" },
-        { "STAMINA UPGRADE", "스태미나 강화" },
+        { "STAMINA UPGRADE", "점수 배율" },
+        { "SCORE MULTIPLIER", "점수 배율" },
         { "CIRCLE SIZE", "원 크기" },
         { "SETTINGS", "설정" },
         { "LANGUAGE", "언어" },
@@ -151,6 +152,14 @@ private void ToggleSound()
 
     private void ReplayTutorial()
     {
+        GameManager gameManager = GameManager.Instance;
+        if (gameManager == null ||
+            (gameManager.CurrentState != GameState.MainMenu &&
+             !gameManager.ReturnToMainMenu()))
+        {
+            return;
+        }
+
         GameAudio.Instance?.PlayButton();
         settingsPanel?.SetActive(false);
         mainPanel?.SetActive(true);

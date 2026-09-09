@@ -30,6 +30,8 @@ public class Player : InputAxis
     public PlayerHealth Health => health;
     public PlayerStamina Stamina => staminaController;
     public ScoreController Score => scoreController;
+    public float PulseHitboxScale => upgradeApplier == null ? 1f : upgradeApplier.PulseHitboxScale;
+    public bool IsPracticeMode { get; private set; }
     public float StaminaNormalized =>
         staminaController == null ? 0f : staminaController.Normalized;
 
@@ -44,6 +46,7 @@ public class Player : InputAxis
         health = GetComponent<PlayerHealth>();
         staminaController = GetComponent<PlayerStamina>();
         scoreController = GetComponent<ScoreController>();
+        health.Damaged += scoreController.ResetCombo;
         upgradeApplier = GetComponent<PlayerUpgradeApplier>();
         playerVisual = GetComponent<PlayerVisual>();
         basePosition = transform.position;
@@ -52,10 +55,15 @@ public class Player : InputAxis
     private void Start()
     {
         upgradeApplier.Apply();
+        scoreController.SetShopBonus(GetUpgradeValue(UpgradeType.Score));
     }
 
     private void OnDestroy()
     {
+        if (health != null && scoreController != null)
+        {
+            health.Damaged -= scoreController.ResetCombo;
+        }
         if (Instance == this)
         {
             Instance = null;
@@ -95,7 +103,7 @@ public class Player : InputAxis
     {
         if (!isGameOver)
         {
-            health.TakeDamage();
+            health.TakeDamage(IsPracticeMode);
         }
     }
 
@@ -126,6 +134,7 @@ public class Player : InputAxis
         playerVisual.SetGameplayVisible(true);
         playerVisual.ResetVisual();
         upgradeApplier.Apply();
+        scoreController.SetShopBonus(GetUpgradeValue(UpgradeType.Score));
         staminaController.ResetStamina();
     }
 
@@ -146,19 +155,32 @@ public class Player : InputAxis
     public void ApplyUpgradeStats()
     {
         upgradeApplier.Apply();
+        scoreController.SetShopBonus(GetUpgradeValue(UpgradeType.Score));
         SpawnPivot.Instance?.RefreshJudgementDistances();
+    }
+
+    public void BeginPractice()
+    {
+        IsPracticeMode = true;
+        health.ResetHealth();
+        staminaController.ResetStamina();
+        scoreController.ResetScore();
+    }
+
+    public void EndPractice()
+    {
+        if (!IsPracticeMode) return;
+        IsPracticeMode = false;
+        health.ResetHealth();
+        staminaController.ResetStamina();
+        scoreController.ResetScore();
+        transform.position = basePosition;
+        ResetPointerInputTracking();
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (isGameOver || !collision.gameObject.CompareTag("Enemy"))
-        {
-            return;
-        }
-
-        SpecialEnemy specialEnemy =
-            collision.gameObject.GetComponent<SpecialEnemy>();
-        if (specialEnemy != null && specialEnemy.TryHandlePlayerContact())
+        if (isGameOver || !collision.gameObject.activeInHierarchy || !collision.gameObject.CompareTag("Enemy"))
         {
             return;
         }
@@ -172,7 +194,7 @@ public class Player : InputAxis
         long awardedScore = SpawnPivot.Instance == null
             ? baseAwardedScore
             : SpawnPivot.Instance.ApplyScoreMultiplier(baseAwardedScore);
-        scoreController.AddScore(awardedScore);
+        scoreController.RegisterDefeat(awardedScore, isPerfect);
         
         GameAudio.Instance?.PlayHit(isPerfect);
         if (isPerfect)
@@ -183,7 +205,7 @@ public class Player : InputAxis
         EnemyJudged?.Invoke(isPerfect);
         judge.color = judgementColor;
 
-        if (isPerfect && !TryHandlePerfectCoinDrop(collision.transform.position))
+        if (isPerfect && !TryHandlePerfectCoinDrop(collision.transform.position) && !IsPracticeMode)
         {
             const int perfectCoinReward = 1;
             progression.AddCoin(perfectCoinReward);
@@ -197,9 +219,10 @@ public class Player : InputAxis
 
         if (scoreController.CurrentScore > 0L)
         {
-            staminaController.Restore(30f);
+            staminaController.Restore(24f);
         }
 
+        collision.GetComponent<SpecialEnemy>()?.PlayDefeatFeedback();
         collision.gameObject.SetActive(false);
     }
 
